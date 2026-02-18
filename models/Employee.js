@@ -7,6 +7,12 @@ const employeeSchema = mongoose.Schema({
         unique: true,
         trim: true,
     },
+    email: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: '',
+    },
     password: {
         type: String,
         required: [true, 'Please add a password'],

@@ -7,10 +7,9 @@ const Order = require('../models/Order');
 const addOrderItems = asyncHandler(async (req, res) => {
     const { items, totalAmount, shippingAddress } = req.body;
 
-    if (items && items.length === 0) {
+    if (!items || items.length === 0) {
         res.status(400);
         throw new Error('No order items');
-        return;
     }
 
     const order = new Order({

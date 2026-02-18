@@ -18,19 +18,26 @@ const getAdminStats = asyncHandler(async (req, res) => {
     const pendingOrders = await Order.countDocuments({ status: 'Pending' });
     const pendingBookings = await Booking.countDocuments({ status: 'Pending' });
 
-    // 2. Total Revenue
+    // 2. Total Revenue (Orders + Bookings)
     const revenueAgg = await Order.aggregate([
         { $match: { status: { $ne: 'Cancelled' } } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
-    const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
+    const orderRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
+
+    const bookingRevenueAgg = await Booking.aggregate([
+        { $match: { status: { $ne: 'Cancelled' } } },
+        { $group: { _id: null, total: { $sum: '$price' } } }
+    ]);
+    const bookingRevenue = bookingRevenueAgg.length > 0 ? bookingRevenueAgg[0].total : 0;
+    const totalRevenue = orderRevenue + bookingRevenue;
 
     // 3. Monthly Revenue
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const monthlyRevenueAgg = await Order.aggregate([
+    const monthlyOrderRevenueAgg = await Order.aggregate([
         {
             $match: {
                 status: { $ne: 'Cancelled' },
@@ -39,7 +46,19 @@ const getAdminStats = asyncHandler(async (req, res) => {
         },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
-    const monthlyRevenue = monthlyRevenueAgg.length > 0 ? monthlyRevenueAgg[0].total : 0;
+    const monthlyOrderRevenue = monthlyOrderRevenueAgg.length > 0 ? monthlyOrderRevenueAgg[0].total : 0;
+
+    const monthlyBookingRevenueAgg = await Booking.aggregate([
+        {
+            $match: {
+                status: { $ne: 'Cancelled' },
+                createdAt: { $gte: startOfMonth }
+            }
+        },
+        { $group: { _id: null, total: { $sum: '$price' } } }
+    ]);
+    const monthlyBookingRevenue = monthlyBookingRevenueAgg.length > 0 ? monthlyBookingRevenueAgg[0].total : 0;
+    const monthlyRevenue = monthlyOrderRevenue + monthlyBookingRevenue;
 
     // 4. Recent Activity (Last 5 items: mixed orders and bookings)
     const recentOrders = await Order.find({})
@@ -61,6 +80,8 @@ const getAdminStats = asyncHandler(async (req, res) => {
         pendingOrders,
         pendingBookings,
         totalRevenue,
+        orderRevenue,
+        bookingRevenue,
         monthlyRevenue,
         recentOrders,
         recentBookings
