@@ -1,0 +1,15 @@
+const express = require('express');
+const router = express.Router();
+const {
+    addOrderItems,
+    getMyOrders,
+    getOrders,
+    updateOrderToStatus,
+} = require('../controllers/orderController');
+const { protect, admin, employee } = require('../middleware/authMiddleware');
+
+router.route('/').post(protect, addOrderItems).get(protect, employee, getOrders);
+router.route('/myorders').get(protect, getMyOrders);
+router.route('/:id/status').put(protect, employee, updateOrderToStatus);
+
+module.exports = router;
