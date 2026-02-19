@@ -45,6 +45,15 @@ const employeeSchema = mongoose.Schema({
         type: Boolean,
         default: true
     },
+    isOnline: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    lastActiveAt: {
+        type: Date,
+        default: null
+    },
     loginHistory: [{
         timestamp: { type: Date, default: Date.now },
         ipAddress: String,

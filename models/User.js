@@ -50,6 +50,15 @@ const userSchema = new mongoose.Schema({
         userAgent: String,
         device: String
     }],
+    isOnline: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    lastActiveAt: {
+        type: Date,
+        default: null
+    },
     addresses: [{
         street: String,
         city: String,

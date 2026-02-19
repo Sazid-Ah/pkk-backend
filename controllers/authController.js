@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
 const { sendOTPEmail, sendPasswordResetConfirmation } = require('../utils/emailService');
+const { logActivity } = require('./activityLogController');
 
 // @desc    Register new user
 // @route   POST /api/auth/register
@@ -85,8 +86,9 @@ const loginUser = asyncHandler(async (req, res) => {
     if (user && (await bcrypt.compare(password, user.password))) {
         const accessToken = generateAccessToken(user._id, rememberMe);
         const refreshToken = generateRefreshToken(user._id);
+        const sessionId = crypto.randomBytes(16).toString('hex');
 
-        // Record login history
+        // Record login history (keep for backward compatibility)
         const loginEntry = {
             timestamp: new Date(),
             ipAddress: req.ip || req.connection.remoteAddress,
@@ -103,12 +105,31 @@ const loginUser = asyncHandler(async (req, res) => {
             user.loginHistory = user.loginHistory.slice(0, 20);
         }
 
+        // Set online status and last active time
+        user.isOnline = true;
+        user.lastActiveAt = new Date();
+
         // Save refresh token (only for Users, not Employees)
         if (!isEmployee) {
             user.refreshToken = refreshToken;
         }
 
         await user.save();
+
+        // Log activity in ActivityLog collection
+        await logActivity(
+            user._id,
+            isEmployee ? 'Employee' : 'User',
+            user.username,
+            user.email || '',
+            user.role,
+            'login',
+            req.ip || req.connection.remoteAddress,
+            req.get('user-agent'),
+            req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
+            sessionId,
+            `User logged in successfully`
+        );
 
         res.json({
             _id: user.id,
@@ -118,8 +139,11 @@ const loginUser = asyncHandler(async (req, res) => {
             phoneNumber: user.phoneNumber,
             avatar: user.avatar,
             addresses: user.addresses,
+            isOnline: user.isOnline,
+            lastActiveAt: user.lastActiveAt,
             token: accessToken,
             refreshToken: !isEmployee ? refreshToken : undefined,
+            sessionId: sessionId,
             // Optional: return full profile if employee
             ...(isEmployee ? {
                 fullName: user.fullName,
@@ -307,20 +331,43 @@ const refreshToken = asyncHandler(async (req, res) => {
 // @access  Private
 const logout = asyncHandler(async (req, res) => {
     // req.user is set by auth middleware
+    const { sessionId } = req.body;
+    
     // Try User first, then Employee
     let user = await User.findById(req.user._id);
+    let isEmployee = false;
+
+    if (!user) {
+        // Try Employee model
+        const Employee = require('../models/Employee');
+        user = await Employee.findById(req.user._id);
+        isEmployee = true;
+    }
 
     if (user) {
-        user.refreshToken = undefined;
-        await user.save();
-    } else {
-        // Try Employee model (employees don't store refreshToken, but handle gracefully)
-        const Employee = require('../models/Employee');
-        const employee = await Employee.findById(req.user._id);
-        if (employee && employee.refreshToken) {
-            employee.refreshToken = undefined;
-            await employee.save();
+        // Set offline status
+        user.isOnline = false;
+        user.lastActiveAt = new Date();
+
+        if (!isEmployee) {
+            user.refreshToken = undefined;
         }
+        await user.save();
+
+        // Log activity in ActivityLog collection
+        await logActivity(
+            user._id,
+            isEmployee ? 'Employee' : 'User',
+            user.username,
+            user.email || '',
+            user.role,
+            'logout',
+            req.ip || req.connection.remoteAddress,
+            req.get('user-agent'),
+            req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
+            sessionId,
+            `User logged out`
+        );
     }
 
     res.status(200).json({
