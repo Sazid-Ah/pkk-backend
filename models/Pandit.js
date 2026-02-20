@@ -22,6 +22,21 @@ const panditSchema = new mongoose.Schema({
         type: String,
         default: '', // URL to image
     },
+    address: {
+        type: String,
+        default: '',
+    },
+    location: {
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point'
+        },
+        coordinates: {
+            type: [Number], // [longitude, latitude]
+            default: [0, 0]
+        }
+    },
     isFeatured: {
         type: Boolean,
         default: false,
@@ -33,5 +48,7 @@ const panditSchema = new mongoose.Schema({
 }, {
     timestamps: true,
 });
+
+panditSchema.index({ location: '2dsphere' });
 
 module.exports = mongoose.model('Pandit', panditSchema);

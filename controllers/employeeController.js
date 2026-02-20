@@ -35,6 +35,15 @@ const createEmployee = asyncHandler(async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Calculate location from address
+    let location = '';
+    if (address && address.city) {
+        location = address.city;
+        if (address.state) {
+            location += `, ${address.state}`;
+        }
+    }
+
     // Create Employee
     const employee = await Employee.create({
         username,
@@ -44,6 +53,7 @@ const createEmployee = asyncHandler(async (req, res) => {
         phone,
         position,
         address,
+        location,
         salary
     });
 
@@ -76,6 +86,15 @@ const updateEmployee = asyncHandler(async (req, res) => {
         employee.address = req.body.address || employee.address;
         employee.salary = req.body.salary || employee.salary;
         employee.isActive = req.body.isActive !== undefined ? req.body.isActive : employee.isActive;
+
+        // Update location base on new address
+        if (req.body.address && req.body.address.city) {
+            let location = req.body.address.city;
+            if (req.body.address.state) {
+                location += `, ${req.body.address.state}`;
+            }
+            employee.location = location;
+        }
 
         const updatedEmployee = await employee.save();
         res.json(updatedEmployee);

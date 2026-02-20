@@ -35,7 +35,15 @@ const employeeSchema = mongoose.Schema({
         default: 'Staff'
     },
     address: {
-        type: String
+        street: { type: String, default: '' },
+        city: { type: String, default: '' },
+        state: { type: String, default: '' },
+        zip: { type: String, default: '' },
+        country: { type: String, default: 'India' }
+    },
+    location: {
+        type: String,
+        default: ''
     },
     salary: {
         type: Number,

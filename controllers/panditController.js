@@ -5,7 +5,23 @@ const Pandit = require('../models/Pandit');
 // @route   GET /api/pandits
 // @access  Public
 const getPandits = asyncHandler(async (req, res) => {
-    const pandits = await Pandit.find({});
+    const { lat, lng } = req.query;
+
+    let query = {};
+
+    if (lat && lng) {
+        query.location = {
+            $nearSphere: {
+                $geometry: {
+                    type: "Point",
+                    coordinates: [parseFloat(lng), parseFloat(lat)]
+                },
+                $maxDistance: 50000 // 50km radius, adjustable
+            }
+        };
+    }
+
+    const pandits = await Pandit.find(query);
     res.json(pandits);
 });
 
@@ -13,7 +29,15 @@ const getPandits = asyncHandler(async (req, res) => {
 // @route   POST /api/pandits
 // @access  Private/Admin
 const createPandit = asyncHandler(async (req, res) => {
-    const { name, specialty, rating, price, image, occasions } = req.body;
+    const { name, specialty, rating, price, image, occasions, address, latitude, longitude } = req.body;
+
+    let location = undefined;
+    if (latitude && longitude) {
+        location = {
+            type: 'Point',
+            coordinates: [parseFloat(longitude), parseFloat(latitude)]
+        };
+    }
 
     const pandit = await Pandit.create({
         name,
@@ -22,6 +46,8 @@ const createPandit = asyncHandler(async (req, res) => {
         price,
         image,
         occasions,
+        address,
+        ...(location && { location })
     });
 
     res.status(201).json(pandit);
@@ -40,6 +66,14 @@ const updatePandit = asyncHandler(async (req, res) => {
         pandit.price = req.body.price || pandit.price;
         pandit.image = req.body.image || pandit.image;
         pandit.occasions = req.body.occasions || pandit.occasions;
+        if (req.body.address !== undefined) pandit.address = req.body.address;
+
+        if (req.body.latitude && req.body.longitude) {
+            pandit.location = {
+                type: 'Point',
+                coordinates: [parseFloat(req.body.longitude), parseFloat(req.body.latitude)]
+            };
+        }
 
         const updatedPandit = await pandit.save();
         res.json(updatedPandit);
