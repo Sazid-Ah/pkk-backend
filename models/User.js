@@ -64,6 +64,11 @@ const userSchema = new mongoose.Schema({
         city: String,
         state: String,
         zip: String,
+        label: {
+            type: String,
+            enum: ['Home', 'Office', 'Other'],
+            default: 'Home'
+        },
         country: { type: String, default: 'India' },
         isDefault: { type: Boolean, default: false }
     }],
