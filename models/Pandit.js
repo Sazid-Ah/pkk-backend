@@ -10,6 +10,15 @@ const panditSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Please add a specialty'],
     },
+    languages: [{
+        type: String,
+        trim: true,
+    }],
+    about: {
+        type: String,
+        trim: true,
+        default: '',
+    },
     rating: {
         type: Number,
         default: 0,

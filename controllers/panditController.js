@@ -29,7 +29,7 @@ const getPandits = asyncHandler(async (req, res) => {
 // @route   POST /api/pandits
 // @access  Private/Admin
 const createPandit = asyncHandler(async (req, res) => {
-    const { name, specialty, rating, price, image, occasions, address, latitude, longitude } = req.body;
+    const { name, specialty, languages, about, rating, price, image, occasions, address, latitude, longitude } = req.body;
 
     let location = undefined;
     if (latitude && longitude) {
@@ -42,6 +42,8 @@ const createPandit = asyncHandler(async (req, res) => {
     const pandit = await Pandit.create({
         name,
         specialty,
+        languages,
+        about,
         rating,
         price,
         image,
@@ -62,6 +64,8 @@ const updatePandit = asyncHandler(async (req, res) => {
     if (pandit) {
         pandit.name = req.body.name || pandit.name;
         pandit.specialty = req.body.specialty || pandit.specialty;
+        pandit.languages = req.body.languages || pandit.languages;
+        if (req.body.about !== undefined) pandit.about = req.body.about;
         pandit.rating = req.body.rating || pandit.rating;
         pandit.price = req.body.price || pandit.price;
         pandit.image = req.body.image || pandit.image;
