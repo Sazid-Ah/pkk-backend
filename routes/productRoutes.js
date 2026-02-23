@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { cacheMiddleware, clearCacheMiddleware } = require('../middlewares/cacheMiddleware');
+
 const {
     getProducts,
     createProduct,
@@ -9,10 +9,10 @@ const {
 } = require('../controllers/productController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
-router.route('/').get(cacheMiddleware, getProducts).post(protect, admin, clearCacheMiddleware('/api/products'), createProduct);
+router.route('/').get(getProducts).post(protect, admin, createProduct);
 router
     .route('/:id')
-    .put(protect, admin, clearCacheMiddleware('/api/products'), updateProduct)
-    .delete(protect, admin, clearCacheMiddleware('/api/products'), deleteProduct);
+    .put(protect, admin, updateProduct)
+    .delete(protect, admin, deleteProduct);
 
 module.exports = router;
