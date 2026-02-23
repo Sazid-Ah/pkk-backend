@@ -12,6 +12,9 @@ connectDB();
 
 const app = express();
 
+const { globalLimiter } = require('./middlewares/rateLimiter');
+app.use(globalLimiter);
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

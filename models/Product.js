@@ -23,7 +23,22 @@ const productSchema = new mongoose.Schema({
     },
     weight: {
         type: String, // e.g. "500g", "1kg"
-    }
+    },
+    type: {
+        type: String,
+        enum: ['individual', 'package'],
+        default: 'individual',
+    },
+    includedItems: [{
+        name: {
+            type: String,
+            required: true,
+        },
+        price: {
+            type: Number,
+            required: true,
+        }
+    }]
 }, {
     timestamps: true,
 });

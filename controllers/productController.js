@@ -13,15 +13,22 @@ const getProducts = asyncHandler(async (req, res) => {
 // @route   POST /api/products
 // @access  Private/Admin
 const createProduct = asyncHandler(async (req, res) => {
-    const { name, category, price, image, description, weight } = req.body;
+    const { name, category, price, image, description, weight, type, includedItems } = req.body;
+
+    let finalPrice = price;
+    if (type === 'package' && includedItems && includedItems.length > 0) {
+        finalPrice = includedItems.reduce((acc, item) => acc + Number(item.price), 0);
+    }
 
     const product = await Product.create({
         name,
         category,
-        price,
+        price: finalPrice,
         image,
         description,
         weight,
+        type: type || 'individual',
+        includedItems: type === 'package' ? includedItems : [],
     });
 
     res.status(201).json(product);
@@ -36,10 +43,25 @@ const updateProduct = asyncHandler(async (req, res) => {
     if (product) {
         product.name = req.body.name || product.name;
         product.category = req.body.category || product.category;
-        product.price = req.body.price || product.price;
         product.image = req.body.image || product.image;
         product.description = req.body.description || product.description;
         product.weight = req.body.weight || product.weight;
+
+        if (req.body.type) {
+            product.type = req.body.type;
+        }
+
+        if (product.type === 'package') {
+            product.includedItems = req.body.includedItems || product.includedItems;
+            if (product.includedItems && product.includedItems.length > 0) {
+                product.price = product.includedItems.reduce((acc, item) => acc + Number(item.price), 0);
+            } else {
+                product.price = req.body.price || product.price;
+            }
+        } else {
+            product.price = req.body.price || product.price;
+            product.includedItems = [];
+        }
 
         const updatedProduct = await product.save();
         res.json(updatedProduct);

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { cacheMiddleware, clearCacheMiddleware } = require('../middlewares/cacheMiddleware');
 const {
     getPandits,
     createPandit,
@@ -8,10 +9,10 @@ const {
 } = require('../controllers/panditController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
-router.route('/').get(getPandits).post(protect, admin, createPandit);
+router.route('/').get(cacheMiddleware, getPandits).post(protect, admin, clearCacheMiddleware('/api/pandits'), createPandit);
 router
     .route('/:id')
-    .put(protect, admin, updatePandit)
-    .delete(protect, admin, deletePandit);
+    .put(protect, admin, clearCacheMiddleware('/api/pandits'), updatePandit)
+    .delete(protect, admin, clearCacheMiddleware('/api/pandits'), deletePandit);
 
 module.exports = router;
