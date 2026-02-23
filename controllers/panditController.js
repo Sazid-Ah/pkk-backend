@@ -21,7 +21,7 @@ const getPandits = asyncHandler(async (req, res) => {
         };
     }
 
-    const pandits = await Pandit.find(query);
+    const pandits = await Pandit.find(query).populate('occasions');
     res.json(pandits);
 });
 
@@ -52,7 +52,7 @@ const createPandit = asyncHandler(async (req, res) => {
         ...(location && { location })
     });
 
-    res.status(201).json(pandit);
+    res.status(201).json(await pandit.populate('occasions'));
 });
 
 // @desc    Update a pandit
@@ -80,7 +80,7 @@ const updatePandit = asyncHandler(async (req, res) => {
         }
 
         const updatedPandit = await pandit.save();
-        res.json(updatedPandit);
+        res.json(await updatedPandit.populate('occasions'));
     } else {
         res.status(404);
         throw new Error('Pandit not found');
