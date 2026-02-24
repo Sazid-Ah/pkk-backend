@@ -29,7 +29,7 @@ const getPandits = asyncHandler(async (req, res) => {
 // @route   POST /api/pandits
 // @access  Private/Admin
 const createPandit = asyncHandler(async (req, res) => {
-    const { name, specialty, languages, about, rating, price, image, occasions, address, latitude, longitude } = req.body;
+    const { name, username, password, specialty, languages, about, rating, price, image, occasions, address, latitude, longitude } = req.body;
 
     let location = undefined;
     if (latitude && longitude) {
@@ -39,8 +39,26 @@ const createPandit = asyncHandler(async (req, res) => {
         };
     }
 
+    if (!username || !password) {
+        res.status(400);
+        throw new Error('Please provide both username and password for the Pandit');
+    }
+
+    // Check if username already exists
+    const existingPandit = await Pandit.findOne({ username });
+    if (existingPandit) {
+        res.status(400);
+        throw new Error('Username already exists in Pandit collection');
+    }
+
+    const bcrypt = require('bcryptjs');
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     const pandit = await Pandit.create({
         name,
+        username,
+        password: hashedPassword,
         specialty,
         languages,
         about,
@@ -62,6 +80,21 @@ const updatePandit = asyncHandler(async (req, res) => {
     const pandit = await Pandit.findById(req.params.id);
 
     if (pandit) {
+        if (req.body.username && req.body.username !== pandit.username) {
+            const existingPandit = await Pandit.findOne({ username: req.body.username });
+            if (existingPandit) {
+                res.status(400);
+                throw new Error('Username already exists');
+            }
+            pandit.username = req.body.username;
+        }
+
+        if (req.body.password) {
+            const bcrypt = require('bcryptjs');
+            const salt = await bcrypt.genSalt(10);
+            pandit.password = await bcrypt.hash(req.body.password, salt);
+        }
+
         pandit.name = req.body.name || pandit.name;
         pandit.specialty = req.body.specialty || pandit.specialty;
         pandit.languages = req.body.languages || pandit.languages;
