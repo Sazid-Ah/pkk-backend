@@ -151,7 +151,7 @@ const loginUser = asyncHandler(async (req, res) => {
             _id: user.id,
             username: user.username,
             email: user.email,
-            role: user.role,
+            role: user.role || (isPandit ? 'pandit' : (isEmployee ? 'employee' : 'user')),
             phoneNumber: user.phoneNumber,
             avatar: user.avatar,
             addresses: user.addresses,
@@ -455,8 +455,21 @@ const updateProfile = asyncHandler(async (req, res) => {
 // @access  Private
 const getMe = asyncHandler(async (req, res) => {
     // The req.user is already populated by protect middleware
+    const me = req.user.toObject ? req.user.toObject() : req.user;
+
+    // Assign role if missing in old database documents
+    if (!me.role) {
+        if (me.specialty !== undefined) {
+            me.role = 'pandit';
+        } else if (me.position !== undefined) {
+            me.role = 'employee';
+        } else {
+            me.role = 'user';
+        }
+    }
+
     // Just return it with all necessary fields
-    res.status(200).json(req.user);
+    res.status(200).json(me);
 });
 
 // @desc    Get all users (Admin only)
