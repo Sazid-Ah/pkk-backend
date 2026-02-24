@@ -177,6 +177,82 @@ const loginUser = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Authenticate a customer (User role only) - for mobile app
+// @route   POST /api/auth/login/customer
+// @access  Public
+const loginCustomer = asyncHandler(async (req, res) => {
+    const { username, password, rememberMe } = req.body;
+
+    // Only check User collection (customers)
+    const user = await User.findOne({ username });
+
+    if (!user) {
+        res.status(401);
+        throw new Error('Invalid credentials');
+    }
+
+    // Reject non-customer roles (e.g. someone added as admin in User collection)
+    if (user.role && user.role !== 'user') {
+        res.status(403);
+        throw new Error('Access denied. Please use the admin portal to log in.');
+    }
+
+    if (!(await bcrypt.compare(password, user.password))) {
+        res.status(401);
+        throw new Error('Invalid credentials');
+    }
+
+    const accessToken = generateAccessToken(user._id, rememberMe);
+    const refreshToken = generateRefreshToken(user._id);
+    const sessionId = crypto.randomBytes(16).toString('hex');
+
+    const loginEntry = {
+        timestamp: new Date(),
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get('user-agent'),
+        device: req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop'
+    };
+
+    if (!user.loginHistory) user.loginHistory = [];
+    user.loginHistory.unshift(loginEntry);
+    if (user.loginHistory.length > 20) user.loginHistory = user.loginHistory.slice(0, 20);
+
+    user.isOnline = true;
+    user.lastActiveAt = new Date();
+    user.refreshToken = refreshToken;
+
+    await user.save();
+
+    await logActivity(
+        user._id,
+        'User',
+        user.username,
+        user.email || '',
+        user.role || 'user',
+        'login',
+        req.ip || req.connection.remoteAddress,
+        req.get('user-agent'),
+        req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
+        sessionId,
+        `Customer logged in via mobile app`
+    );
+
+    res.json({
+        _id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role || 'user',
+        phoneNumber: user.phoneNumber,
+        avatar: user.avatar,
+        addresses: user.addresses,
+        isOnline: user.isOnline,
+        lastActiveAt: user.lastActiveAt,
+        token: accessToken,
+        refreshToken,
+        sessionId,
+    });
+});
+
 // @desc    Forgot password - Send OTP
 // @route   POST /api/auth/forgot-password
 // @access  Public
@@ -543,6 +619,7 @@ const generateRefreshToken = (id) => {
 module.exports = {
     registerUser,
     loginUser,
+    loginCustomer,
     forgotPassword,
     verifyOTP,
     resetPassword,
