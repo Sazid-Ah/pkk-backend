@@ -151,7 +151,7 @@ const loginUser = asyncHandler(async (req, res) => {
             _id: user.id,
             username: user.username,
             email: user.email,
-            role: user.role || (isPandit ? 'pandit' : (isEmployee ? 'employee' : 'user')),
+            role: isPandit ? 'pandit' : (isEmployee ? (user.role || 'employee') : (user.role || 'user')),
             phoneNumber: user.phoneNumber,
             avatar: user.avatar,
             addresses: user.addresses,
