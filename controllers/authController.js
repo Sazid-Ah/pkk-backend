@@ -80,7 +80,19 @@ const loginUser = asyncHandler(async (req, res) => {
     if (!user) {
         const Employee = require('../models/Employee');
         user = await Employee.findOne({ username });
-        isEmployee = true;
+        if (user) {
+            isEmployee = true;
+        }
+    }
+
+    // 3. If not found, try Pandit collection
+    let isPandit = false;
+    if (!user) {
+        const Pandit = require('../models/Pandit');
+        user = await Pandit.findOne({ username });
+        if (user) {
+            isPandit = true;
+        }
     }
 
     if (user && (await bcrypt.compare(password, user.password))) {
@@ -109,20 +121,24 @@ const loginUser = asyncHandler(async (req, res) => {
         user.isOnline = true;
         user.lastActiveAt = new Date();
 
-        // Save refresh token (only for Users, not Employees)
-        if (!isEmployee) {
+        // Save refresh token (only for Users, not Employees or Pandits)
+        if (!isEmployee && !isPandit) {
             user.refreshToken = refreshToken;
         }
 
         await user.save();
 
+        let userTypeDesc = 'User';
+        if (isEmployee) userTypeDesc = 'Employee';
+        if (isPandit) userTypeDesc = 'Pandit';
+
         // Log activity in ActivityLog collection
         await logActivity(
             user._id,
-            isEmployee ? 'Employee' : 'User',
-            user.username,
+            userTypeDesc,
+            user.username || user.name,
             user.email || '',
-            user.role,
+            user.role || 'pandit',
             'login',
             req.ip || req.connection.remoteAddress,
             req.get('user-agent'),
@@ -148,6 +164,11 @@ const loginUser = asyncHandler(async (req, res) => {
             ...(isEmployee ? {
                 fullName: user.fullName,
                 position: user.position
+            } : {}),
+            ...(isPandit ? {
+                name: user.name,
+                specialty: user.specialty,
+                isFeatured: user.isFeatured
             } : {})
         });
     } else {
@@ -332,16 +353,26 @@ const refreshToken = asyncHandler(async (req, res) => {
 const logout = asyncHandler(async (req, res) => {
     // req.user is set by auth middleware
     const { sessionId } = req.body;
-    
-    // Try User first, then Employee
+
+    // Try User first, then Employee, then Pandit
     let user = await User.findById(req.user._id);
     let isEmployee = false;
+    let isPandit = false;
 
     if (!user) {
-        // Try Employee model
         const Employee = require('../models/Employee');
         user = await Employee.findById(req.user._id);
-        isEmployee = true;
+        if (user) {
+            isEmployee = true;
+        }
+    }
+
+    if (!user) {
+        const Pandit = require('../models/Pandit');
+        user = await Pandit.findById(req.user._id);
+        if (user) {
+            isPandit = true;
+        }
     }
 
     if (user) {
@@ -349,16 +380,20 @@ const logout = asyncHandler(async (req, res) => {
         user.isOnline = false;
         user.lastActiveAt = new Date();
 
-        if (!isEmployee) {
+        if (!isEmployee && !isPandit) {
             user.refreshToken = undefined;
         }
         await user.save();
 
+        let userTypeDesc = 'User';
+        if (isEmployee) userTypeDesc = 'Employee';
+        if (isPandit) userTypeDesc = 'Pandit';
+
         // Log activity in ActivityLog collection
         await logActivity(
             user._id,
-            isEmployee ? 'Employee' : 'User',
-            user.username,
+            userTypeDesc,
+            user.username || user.name,
             user.email || '',
             user.role,
             'logout',

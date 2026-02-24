@@ -26,6 +26,12 @@ const protect = asyncHandler(async (req, res, next) => {
                 user = await Employee.findById(decoded.id).select('-password');
             }
 
+            // If not found, try Pandit
+            if (!user) {
+                const Pandit = require('../models/Pandit');
+                user = await Pandit.findById(decoded.id).select('-password');
+            }
+
             if (!user) {
                 res.status(401);
                 throw new Error('Not authorized, user not found');
@@ -64,7 +70,7 @@ const admin = (req, res, next) => {
 };
 
 const employee = (req, res, next) => {
-    if (req.user && (req.user.role === 'employee' || req.user.role === 'admin')) {
+    if (req.user && (req.user.role === 'employee' || req.user.role === 'staff' || req.user.role === 'admin')) {
         next();
     } else {
         res.status(401);

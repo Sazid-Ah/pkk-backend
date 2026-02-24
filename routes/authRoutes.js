@@ -14,7 +14,7 @@ const {
     getUsers,
     getLoginLogs
 } = require('../controllers/authController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, admin, employee } = require('../middleware/authMiddleware');
 
 router.post('/register', authLimiter, registerUser);
 router.post('/login', authLimiter, loginUser);
@@ -25,7 +25,7 @@ router.post('/refresh-token', refreshToken);
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
-router.get('/users', protect, admin, getUsers);
+router.get('/users', protect, employee, getUsers);
 router.get('/login-logs', protect, admin, getLoginLogs);
 
 module.exports = router;

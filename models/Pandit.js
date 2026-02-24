@@ -6,6 +6,40 @@ const panditSchema = new mongoose.Schema({
         required: [true, 'Please add a name'],
         trim: true,
     },
+    username: {
+        type: String,
+        unique: true,
+        sparse: true,
+        trim: true,
+    },
+    email: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: '',
+    },
+    password: {
+        type: String,
+    },
+    role: {
+        type: String,
+        default: 'pandit',
+    },
+    isOnline: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    lastActiveAt: {
+        type: Date,
+        default: null
+    },
+    loginHistory: [{
+        timestamp: { type: Date, default: Date.now },
+        ipAddress: String,
+        userAgent: String,
+        device: String
+    }],
     specialty: {
         type: String,
         required: [true, 'Please add a specialty'],
