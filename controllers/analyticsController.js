@@ -88,6 +88,34 @@ const getAdminStats = asyncHandler(async (req, res) => {
     });
 });
 
+// @desc    Get employee dashboard stats
+// @route   GET /api/analytics/employee
+// @access  Private/Employee
+const getEmployeeStats = asyncHandler(async (req, res) => {
+    // Basic stats for employee/staff dashboard
+    const pendingOrders = await Order.countDocuments({ status: 'Pending' });
+    // Assuming 'assignedTo' exists on order or we just show 0
+    const assignedToMe = 0;
+
+    // Get today's start and end date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const completedToday = await Order.countDocuments({
+        status: 'Completed',
+        updatedAt: { $gte: today, $lt: tomorrow }
+    });
+
+    res.json({
+        pendingOrders,
+        assignedToMe,
+        completedToday
+    });
+});
+
 module.exports = {
     getAdminStats,
+    getEmployeeStats,
 };
