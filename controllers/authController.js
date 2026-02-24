@@ -72,9 +72,14 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
     const { username, password, rememberMe } = req.body;
 
-    // 1. Try finding in User collection (Customers)
+    // 1. Try finding in User collection (Customers only — role must be 'user' or unset)
     let user = await User.findOne({ username });
     let isEmployee = false;
+
+    // Skip if the found user is not a customer (e.g. role was set to admin/employee in User collection)
+    if (user && user.role && user.role !== 'user') {
+        user = null;
+    }
 
     // 2. If not found, try Employee collection (Admin/Staff)
     if (!user) {
@@ -132,20 +137,24 @@ const loginUser = asyncHandler(async (req, res) => {
         if (isEmployee) userTypeDesc = 'Employee';
         if (isPandit) userTypeDesc = 'Pandit';
 
-        // Log activity in ActivityLog collection
-        await logActivity(
-            user._id,
-            userTypeDesc,
-            user.username || user.name,
-            user.email || '',
-            user.role || 'pandit',
-            'login',
-            req.ip || req.connection.remoteAddress,
-            req.get('user-agent'),
-            req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
-            sessionId,
-            `User logged in successfully`
-        );
+        // Log activity in ActivityLog collection (non-blocking)
+        try {
+            await logActivity(
+                user._id,
+                userTypeDesc,
+                user.username || user.name,
+                user.email || '',
+                isPandit ? 'pandit' : (isEmployee ? (user.role || 'employee') : (user.role || 'user')),
+                'login',
+                req.ip || req.connection.remoteAddress,
+                req.get('user-agent'),
+                req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
+                sessionId,
+                `User logged in successfully`
+            );
+        } catch (logErr) {
+            console.error('Activity log failed (non-fatal):', logErr.message);
+        }
 
         res.json({
             _id: user.id,

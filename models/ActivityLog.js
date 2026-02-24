@@ -8,7 +8,7 @@ const activityLogSchema = new mongoose.Schema({
     },
     userType: {
         type: String,
-        enum: ['User', 'Employee'],
+        enum: ['User', 'Employee', 'Pandit'],
         required: true
     },
     username: {
@@ -22,7 +22,7 @@ const activityLogSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['user', 'admin', 'employee'],
+        enum: ['user', 'admin', 'employee', 'staff', 'pandit'],
         required: true
     },
     activityType: {
