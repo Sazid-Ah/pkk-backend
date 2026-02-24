@@ -154,6 +154,37 @@ const verifyPayment = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Get order history with filters
+// @route   GET /api/orders/history
+// @access  Private/Employee/Admin
+const getOrderHistory = asyncHandler(async (req, res) => {
+    const { status, startDate, endDate } = req.query;
+
+    const query = {};
+
+    if (status && status !== 'all') {
+        query.status = status;
+    }
+
+    if (startDate || endDate) {
+        query.createdAt = {};
+        if (startDate) {
+            query.createdAt.$gte = new Date(startDate);
+        }
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            query.createdAt.$lte = end;
+        }
+    }
+
+    const orders = await Order.find(query)
+        .populate('user', 'username email')
+        .sort({ createdAt: -1 });
+
+    res.json(orders);
+});
+
 module.exports = {
     addOrderItems,
     getMyOrders,
@@ -161,4 +192,5 @@ module.exports = {
     updateOrderToStatus,
     createRazorpayOrder,
     verifyPayment,
+    getOrderHistory,
 };
