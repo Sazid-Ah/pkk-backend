@@ -39,6 +39,11 @@ const orderSchema = new mongoose.Schema({
         enum: ['Pending', 'Paid', 'Failed'],
         default: 'Pending',
     },
+    paymentMethod: {
+        type: String,
+        enum: ['Razorpay', 'CashOnDelivery'],
+        default: 'Razorpay',
+    },
 }, {
     timestamps: true,
 });

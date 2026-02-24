@@ -13,7 +13,7 @@ const razorpay = new Razorpay({
 // @route   POST /api/orders
 // @access  Private
 const addOrderItems = asyncHandler(async (req, res) => {
-    const { items, totalAmount, shippingAddress } = req.body;
+    const { items, totalAmount, shippingAddress, paymentMethod } = req.body;
 
     if (!items || items.length === 0) {
         res.status(400);
@@ -25,6 +25,9 @@ const addOrderItems = asyncHandler(async (req, res) => {
         items,
         totalAmount,
         shippingAddress,
+        paymentMethod: paymentMethod || 'Razorpay',
+        // Auto-confirm COD orders since there's no payment gateway confirmation needed
+        status: paymentMethod === 'CashOnDelivery' ? 'Confirmed' : 'Pending',
     });
 
     const createdOrder = await order.save();
