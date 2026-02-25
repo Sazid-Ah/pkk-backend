@@ -94,8 +94,12 @@ const getAdminStats = asyncHandler(async (req, res) => {
 const getEmployeeStats = asyncHandler(async (req, res) => {
     // Basic stats for employee/staff dashboard
     const pendingOrders = await Order.countDocuments({ status: 'Pending' });
-    // Assuming 'assignedTo' exists on order or we just show 0
-    const assignedToMe = 0;
+
+    // Count orders currently assigned to this specific employee
+    const assignedToMe = await Order.countDocuments({
+        assignedEmployee: req.user._id,
+        status: { $nin: ['Completed', 'Cancelled'] }
+    });
 
     // Get today's start and end date
     const today = new Date();

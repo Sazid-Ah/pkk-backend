@@ -23,7 +23,14 @@ const orderSchema = new mongoose.Schema({
         default: 'Pending',
     },
     shippingAddress: {
-        type: String, // Simple string for now
+        type: String, // Full formatted address string
+        default: 'Default Address',
+    },
+    // Staff assignment — tracks which employee is handling this order
+    assignedEmployee: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Employee',
+        default: null,
     },
     razorpayOrderId: {
         type: String,

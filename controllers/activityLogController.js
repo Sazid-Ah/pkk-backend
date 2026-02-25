@@ -27,32 +27,32 @@ const logActivity = asyncHandler(async (userId, userType, username, email, role,
 // @route   GET /api/activity-logs
 // @access  Private/Admin
 const getAllActivityLogs = asyncHandler(async (req, res) => {
-    const { 
-        activityType, 
-        userType, 
-        startDate, 
-        endDate, 
-        username, 
+    const {
+        activityType,
+        userType,
+        startDate,
+        endDate,
+        username,
         role,
-        page = 1, 
-        limit = 50 
+        page = 1,
+        limit = 50
     } = req.query;
 
     // Build filter object
     const filter = {};
-    
+
     if (activityType) {
         filter.activityType = activityType;
     }
-    
+
     if (userType) {
         filter.userType = userType;
     }
-    
+
     if (username) {
         filter.username = { $regex: username, $options: 'i' };
     }
-    
+
     if (role) {
         filter.role = role;
     }
@@ -97,13 +97,19 @@ const getAllActivityLogs = asyncHandler(async (req, res) => {
 
 // @desc    Get activity logs for a specific user
 // @route   GET /api/activity-logs/user/:userId
-// @access  Private/Admin
+// @access  Private — users can only see own logs; admins can see any
 const getUserActivityLogs = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const { activityType, page = 1, limit = 50 } = req.query;
 
+    // Authorization: non-admin users can only view their own activity logs
+    if (req.user.role !== 'admin' && req.user._id.toString() !== userId) {
+        res.status(403);
+        throw new Error('Not authorized to view another user\'s activity logs');
+    }
+
     const filter = { userId };
-    
+
     if (activityType) {
         filter.activityType = activityType;
     }

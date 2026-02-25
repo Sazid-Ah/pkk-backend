@@ -21,7 +21,9 @@ router.get('/online-users', protect, admin, getOnlineUsers);
 // Get session details (Admin only)
 router.get('/session/:sessionId', protect, admin, getSessionDetails);
 
-// Get activity logs for a specific user (Admin only)
-router.get('/user/:userId', protect, admin, getUserActivityLogs);
+// Get activity logs for a specific user
+// Users can fetch their own logs; admins can fetch any user's logs
+// Authorization enforced in controller
+router.get('/user/:userId', protect, getUserActivityLogs);
 
 module.exports = router;
