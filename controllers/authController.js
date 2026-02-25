@@ -465,8 +465,9 @@ const logout = asyncHandler(async (req, res) => {
         user.isOnline = false;
         user.lastActiveAt = new Date();
 
-        // Invalidate refresh token for ALL user types
-        user.refreshToken = null;
+        if (!isEmployee && !isPandit) {
+            user.refreshToken = undefined;
+        }
         await user.save();
 
         let userTypeDesc = 'User';

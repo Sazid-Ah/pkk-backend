@@ -97,16 +97,10 @@ const getAllActivityLogs = asyncHandler(async (req, res) => {
 
 // @desc    Get activity logs for a specific user
 // @route   GET /api/activity-logs/user/:userId
-// @access  Private — users can only see own logs; admins can see any
+// @access  Private/Admin
 const getUserActivityLogs = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const { activityType, page = 1, limit = 50 } = req.query;
-
-    // Authorization: non-admin users can only view their own activity logs
-    if (req.user.role !== 'admin' && req.user._id.toString() !== userId) {
-        res.status(403);
-        throw new Error('Not authorized to view another user\'s activity logs');
-    }
 
     const filter = { userId };
 
