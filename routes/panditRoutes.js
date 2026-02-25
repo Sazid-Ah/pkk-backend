@@ -6,8 +6,13 @@ const {
     createPandit,
     updatePandit,
     deletePandit,
+    getPanditProfile,
+    updatePanditProfile,
 } = require('../controllers/panditController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, admin, pandit } = require('../middleware/authMiddleware');
+
+router.route('/me').get(protect, pandit, getPanditProfile).put(protect, pandit, updatePanditProfile);
+
 
 router.route('/').get(getPandits).post(protect, admin, createPandit);
 router

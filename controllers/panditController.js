@@ -1,5 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const Pandit = require('../models/Pandit');
+const bcrypt = require('bcryptjs');
 
 // @desc    Get all pandits
 // @route   GET /api/pandits
@@ -135,9 +136,52 @@ const deletePandit = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Get logged-in Pandit's own profile
+// @route   GET /api/pandits/me
+// @access  Private/Pandit
+const getPanditProfile = asyncHandler(async (req, res) => {
+    const pandit = await Pandit.findById(req.user._id).select('-password').populate('occasions');
+    if (!pandit) {
+        res.status(404);
+        throw new Error('Pandit not found');
+    }
+    res.json(pandit);
+});
+
+// @desc    Pandit updates their own profile (bio, languages, about)
+// @route   PUT /api/pandits/me
+// @access  Private/Pandit
+const updatePanditProfile = asyncHandler(async (req, res) => {
+    const pandit = await Pandit.findById(req.user._id);
+    if (!pandit) {
+        res.status(404);
+        throw new Error('Pandit not found');
+    }
+
+    // Pandits can only update these fields (not price, specialty, name)
+    if (req.body.about !== undefined) pandit.about = req.body.about;
+    if (req.body.languages) {
+        pandit.languages = Array.isArray(req.body.languages)
+            ? req.body.languages
+            : req.body.languages.split(',').map(l => l.trim()).filter(l => l);
+    }
+
+    if (req.body.password) {
+        const salt = await bcrypt.genSalt(10);
+        pandit.password = await bcrypt.hash(req.body.password, salt);
+    }
+
+    const updated = await pandit.save();
+    const result = updated.toObject();
+    delete result.password;
+    res.json(result);
+});
+
 module.exports = {
     getPandits,
     createPandit,
     updatePandit,
     deletePandit,
+    getPanditProfile,
+    updatePanditProfile,
 };

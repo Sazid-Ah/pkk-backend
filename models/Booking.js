@@ -35,12 +35,25 @@ const bookingSchema = new mongoose.Schema({
     notes: {
         type: String,
     },
-    address: { // Address where puja will happen
+    address: {
         street: String,
         city: String,
         state: String,
         zip: String,
-    }
+    },
+    paymentMethod: {
+        type: String,
+        enum: ['Online', 'PayAfterService'],
+        default: 'PayAfterService',
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['Pending', 'Paid', 'Failed'],
+        default: 'Pending',
+    },
+    razorpayOrderId: { type: String },
+    razorpayPaymentId: { type: String },
+    razorpaySignature: { type: String },
 }, {
     timestamps: true,
 });

@@ -78,4 +78,13 @@ const employee = (req, res, next) => {
     }
 };
 
-module.exports = { protect, admin, employee };
+const pandit = (req, res, next) => {
+    if (req.user && (req.user.role === 'pandit' || req.user.role === 'admin')) {
+        next();
+    } else {
+        res.status(401);
+        throw new Error('Not authorized as a pandit');
+    }
+};
+
+module.exports = { protect, admin, employee, pandit };
