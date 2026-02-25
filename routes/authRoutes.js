@@ -27,7 +27,7 @@ router.post('/refresh-token', refreshToken);
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
-router.get('/users', protect, employee, getUsers);
+router.get('/users', protect, admin, getUsers);
 router.get('/login-logs', protect, admin, getLoginLogs);
 
 module.exports = router;

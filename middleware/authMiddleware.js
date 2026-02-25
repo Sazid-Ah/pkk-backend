@@ -54,17 +54,10 @@ const protect = asyncHandler(async (req, res, next) => {
 });
 
 const admin = (req, res, next) => {
-    console.log('=== ADMIN MIDDLEWARE CHECK ===');
-    console.log('req.user exists:', !!req.user);
-    console.log('req.user role:', req.user?.role);
-    console.log('req.user object:', JSON.stringify(req.user, null, 2));
-
     if (req.user && req.user.role === 'admin') {
-        console.log('✅ Admin check passed');
         next();
     } else {
-        console.log('❌ Admin check failed');
-        res.status(401);
+        res.status(403);
         throw new Error('Not authorized as an admin');
     }
 };
@@ -82,9 +75,19 @@ const pandit = (req, res, next) => {
     if (req.user && (req.user.role === 'pandit' || req.user.role === 'admin')) {
         next();
     } else {
-        res.status(401);
+        res.status(403);
         throw new Error('Not authorized as a pandit');
     }
 };
 
-module.exports = { protect, admin, employee, pandit };
+// Allows both admin and employee roles (used for shared routes like GET /orders)
+const adminOrEmployee = (req, res, next) => {
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'employee' || req.user.role === 'staff')) {
+        next();
+    } else {
+        res.status(403);
+        throw new Error('Not authorized');
+    }
+};
+
+module.exports = { protect, admin, employee, pandit, adminOrEmployee };
