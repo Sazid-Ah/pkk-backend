@@ -5,7 +5,7 @@ const crypto = require('crypto');
 // @desc    Log an activity (login, logout, online, offline)
 // @route   Internal function
 // @access  Private
-const logActivity = asyncHandler(async (userId, userType, username, email, role, activityType, ipAddress, userAgent, device, sessionId = null, details = null) => {
+const logActivity = async (userId, userType, username, email, role, activityType, ipAddress, userAgent, device, sessionId = null, details = null) => {
     const activity = await ActivityLog.create({
         userId,
         userType,
@@ -21,7 +21,7 @@ const logActivity = asyncHandler(async (userId, userType, username, email, role,
         timestamp: new Date()
     });
     return activity;
-});
+};
 
 // @desc    Get all activity logs (Admin only)
 // @route   GET /api/activity-logs

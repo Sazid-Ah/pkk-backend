@@ -3,33 +3,25 @@ const nodemailer = require('nodemailer');
 // Create reusable transporter
 const createTransporter = () => {
     return nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.zoho.com',
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true', // false for 587
+        secure: process.env.SMTP_SECURE === 'true', // true for port 465 (Zoho)
         auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASSWORD,
         },
-        tls: {
-            // Zoho-specific workaround: some cloud environments fail certificate verification
-            rejectUnauthorized: false,
-            ciphers: 'SSLv3'
-        },
-        connectionTimeout: 20000, // 20 seconds
-        greetingTimeout: 20000,
-        socketTimeout: 20000,
     });
 };
 
 // Send OTP email
-const sendOTPEmail = async (email, otp, username) => {
+const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP - PKK App', title = 'Password Reset Request') => {
     try {
         const transporter = createTransporter();
 
         const mailOptions = {
             from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
-            subject: 'Password Reset OTP - PKK App',
+            subject: subject,
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -48,11 +40,11 @@ const sendOTPEmail = async (email, otp, username) => {
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>Password Reset Request</h1>
+                            <h1>${title}</h1>
                         </div>
                         <div class="content">
                             <p>Hello <strong>${username}</strong>,</p>
-                            <p>You have requested to reset your password. Please use the following OTP (One-Time Password) to proceed:</p>
+                            <p>Please use the following OTP (One-Time Password) to proceed:</p>
                             
                             <div class="otp-box">
                                 <div class="otp-code">${otp}</div>
@@ -62,7 +54,7 @@ const sendOTPEmail = async (email, otp, username) => {
                                 <strong>⚠️ Important:</strong> This OTP will expire in ${process.env.OTP_EXPIRY_MINUTES || 10} minutes.
                             </div>
                             
-                            <p>If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
+                            <p>If you didn't request this, please ignore this email or contact support if you have concerns.</p>
                             
                             <p>Best regards,<br>PKK Team</p>
                         </div>

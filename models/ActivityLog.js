@@ -27,7 +27,7 @@ const activityLogSchema = new mongoose.Schema({
     },
     activityType: {
         type: String,
-        enum: ['login', 'logout', 'online', 'offline'],
+        enum: ['login', 'logout', 'online', 'offline', 'registration'],
         required: true,
         index: true
     },
