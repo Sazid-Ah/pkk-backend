@@ -6,14 +6,18 @@ const createTransporter = () => {
         host: process.env.SMTP_HOST || 'smtp.zoho.com',
         port: parseInt(process.env.SMTP_PORT) || 587,
         secure: process.env.SMTP_SECURE === 'true', // false for 587
-        requireTLS: true,
         auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASSWORD,
         },
-        connectionTimeout: 15000, // Increase to 15 seconds
-        greetingTimeout: 15000,
-        socketTimeout: 15000,
+        tls: {
+            // Zoho-specific workaround: some cloud environments fail certificate verification
+            rejectUnauthorized: false,
+            ciphers: 'SSLv3'
+        },
+        connectionTimeout: 20000, // 20 seconds
+        greetingTimeout: 20000,
+        socketTimeout: 20000,
     });
 };
 
