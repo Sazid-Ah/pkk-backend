@@ -3,16 +3,17 @@ const nodemailer = require('nodemailer');
 // Create reusable transporter
 const createTransporter = () => {
     return nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        host: process.env.SMTP_HOST || 'smtp.zoho.com',
         port: parseInt(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true', // true for port 465 (Zoho)
+        secure: process.env.SMTP_SECURE === 'true', // false for 587
+        requireTLS: true,
         auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASSWORD,
         },
-        connectionTimeout: 10000, // 10 seconds
-        greetingTimeout: 10000,   // 10 seconds
-        socketTimeout: 10000,     // 10 seconds
+        connectionTimeout: 15000, // Increase to 15 seconds
+        greetingTimeout: 15000,
+        socketTimeout: 15000,
     });
 };
 
