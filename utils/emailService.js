@@ -10,6 +10,9 @@ const createTransporter = () => {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASSWORD,
         },
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 10000,   // 10 seconds
+        socketTimeout: 10000,     // 10 seconds
     });
 };
 
