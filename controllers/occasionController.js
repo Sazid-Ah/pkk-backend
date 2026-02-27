@@ -5,7 +5,14 @@ const Occasion = require('../models/Occasion');
 // @route   GET /api/occasions
 // @access  Public
 const getOccasions = asyncHandler(async (req, res) => {
-    const occasions = await Occasion.find({});
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 0;
+    const skip = (page - 1) * limit;
+
+    const occasions = await Occasion.find({})
+        .skip(skip)
+        .limit(limit);
+
     res.json(occasions);
 });
 

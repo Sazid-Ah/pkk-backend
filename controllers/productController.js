@@ -5,7 +5,14 @@ const Product = require('../models/Product');
 // @route   GET /api/products
 // @access  Public
 const getProducts = asyncHandler(async (req, res) => {
-    const products = await Product.find({});
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 0;
+    const skip = (page - 1) * limit;
+
+    const products = await Product.find({})
+        .skip(skip)
+        .limit(limit);
+
     res.json(products);
 });
 

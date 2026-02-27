@@ -22,7 +22,15 @@ const getPandits = asyncHandler(async (req, res) => {
         };
     }
 
-    const pandits = await Pandit.find(query).populate('occasions');
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 0; // 0 means no limit by default if not specified
+    const skip = (page - 1) * limit;
+
+    const pandits = await Pandit.find(query)
+        .populate('occasions')
+        .skip(skip)
+        .limit(limit);
+
     res.json(pandits);
 });
 
