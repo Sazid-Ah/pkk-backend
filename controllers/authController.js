@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
+const RegistrationOTP = require('../models/RegistrationOTP');
 const { sendOTPEmail, sendPasswordResetConfirmation } = require('../utils/emailService');
 const { logActivity } = require('./activityLogController');
 
@@ -32,6 +33,13 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new Error(userExists.username === username ? 'Username already exists' : 'Email already exists');
     }
 
+    // Check if email is verified
+    const registeredOTP = await RegistrationOTP.findOne({ email, isVerified: true });
+    if (!registeredOTP) {
+        res.status(400);
+        throw new Error('Email not verified. Please verify your email first.');
+    }
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
@@ -45,6 +53,9 @@ const registerUser = asyncHandler(async (req, res) => {
     });
 
     if (user) {
+        // Delete the verification record
+        await RegistrationOTP.deleteOne({ email });
+
         const accessToken = generateAccessToken(user._id);
         const refreshToken = generateRefreshToken(user._id);
 
@@ -625,6 +636,88 @@ const generateRefreshToken = (id) => {
     });
 };
 
+// @desc    Request Register OTP
+// @route   POST /api/auth/register-otp
+// @access  Public
+const requestRegisterOTP = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        res.status(400);
+        throw new Error('Please provide an email');
+    }
+
+    // Check if user already exists
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+        res.status(400);
+        throw new Error('Email already exists');
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES) || 10;
+    const otpExpiry = new Date(Date.now() + otpExpiryMinutes * 60 * 1000);
+
+    // Update or create RegistrationOTP record
+    await RegistrationOTP.findOneAndUpdate(
+        { email },
+        { otp, otpExpiry, isVerified: false },
+        { upsert: true, new: true }
+    );
+
+    // Send OTP via email
+    try {
+        await sendOTPEmail(email, otp, 'Valued Customer');
+        res.status(200).json({
+            success: true,
+            message: 'OTP sent to your email',
+            email: email,
+        });
+    } catch (error) {
+        res.status(500);
+        throw new Error('Failed to send OTP email. Please try again.');
+    }
+});
+
+// @desc    Verify Register OTP
+// @route   POST /api/auth/verify-register-otp
+// @access  Public
+const verifyRegisterOTP = asyncHandler(async (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        res.status(400);
+        throw new Error('Please provide email and OTP');
+    }
+
+    const regOTP = await RegistrationOTP.findOne({ email });
+
+    if (!regOTP) {
+        res.status(404);
+        throw new Error('Verification request not found');
+    }
+
+    if (regOTP.otpExpiry < new Date()) {
+        res.status(400);
+        throw new Error('OTP has expired');
+    }
+
+    if (regOTP.otp !== otp) {
+        res.status(400);
+        throw new Error('Invalid OTP');
+    }
+
+    // Mark as verified
+    regOTP.isVerified = true;
+    await regOTP.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Email verified successfully',
+    });
+});
+
 module.exports = {
     registerUser,
     loginUser,
@@ -638,4 +731,6 @@ module.exports = {
     updateProfile,
     getUsers,
     getLoginLogs,
+    requestRegisterOTP,
+    verifyRegisterOTP,
 };

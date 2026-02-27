@@ -13,11 +13,15 @@ const {
     getMe,
     updateProfile,
     getUsers,
-    getLoginLogs
+    getLoginLogs,
+    requestRegisterOTP,
+    verifyRegisterOTP
 } = require('../controllers/authController');
 const { protect, admin, employee } = require('../middleware/authMiddleware');
 
 router.post('/register', authLimiter, registerUser);
+router.post('/register-otp', authLimiter, requestRegisterOTP);
+router.post('/verify-register-otp', authLimiter, verifyRegisterOTP);
 router.post('/login', authLimiter, loginUser);
 router.post('/login/customer', authLimiter, loginCustomer);
 router.post('/forgot-password', authLimiter, forgotPassword);
