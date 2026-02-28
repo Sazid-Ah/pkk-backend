@@ -663,7 +663,7 @@ const requestRegisterOTP = asyncHandler(async (req, res) => {
     await RegistrationOTP.findOneAndUpdate(
         { email },
         { otp, otpExpiry, isVerified: false },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
     );
 
     // Send OTP via email

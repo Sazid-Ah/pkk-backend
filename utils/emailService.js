@@ -2,14 +2,26 @@ const nodemailer = require('nodemailer');
 
 // Create reusable transporter
 const createTransporter = () => {
+    const host = process.env.SMTP_HOST || 'smtp.zoho.in';
+    const port = parseInt(process.env.SMTP_PORT) || 587;
+    const isSecure = port === 465;
+
+    console.log(`Creating transporter for ${host}:${port} (secure: ${isSecure})`);
+
     return nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true', // true for port 465 (Zoho)
+        host,
+        port,
+        secure: isSecure,
         auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASSWORD,
         },
+        tls: {
+            rejectUnauthorized: false
+        },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 15000
     });
 };
 

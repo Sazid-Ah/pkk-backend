@@ -11,6 +11,7 @@ const port = process.env.PORT || 5001;
 connectDB();
 
 const app = express();
+app.set('trust proxy', 1);
 
 const { globalLimiter } = require('./middlewares/rateLimiter');
 app.use(globalLimiter);
