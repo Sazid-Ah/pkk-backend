@@ -9,8 +9,9 @@ const globalLimiter = rateLimit({
         success: false,
         message: 'Too many requests from this IP, please try again after 15 minutes',
     },
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { trustProxy: false }, // Suppress warning — trust proxy is set at app level
 });
 
 // 2. Auth Rate Limiter: Stricter limit for login/register routes to prevent brute force
@@ -24,6 +25,7 @@ const authLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { trustProxy: false }, // Suppress warning — trust proxy is set at app level
 });
 
 module.exports = {
