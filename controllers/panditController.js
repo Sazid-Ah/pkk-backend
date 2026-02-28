@@ -6,9 +6,12 @@ const bcrypt = require('bcryptjs');
 // @route   GET /api/pandits
 // @access  Public
 const getPandits = asyncHandler(async (req, res) => {
-    const { lat, lng, sort } = req.query;
+    const { lat, lng, sort, occasionId } = req.query;
 
     let query = {};
+    if (occasionId) {
+        query.occasions = occasionId;
+    }
     let sortQuery = {};
 
     if (lat && lng && sort !== 'rating') {

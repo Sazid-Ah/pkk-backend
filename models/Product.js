@@ -38,6 +38,10 @@ const productSchema = new mongoose.Schema({
             type: Number,
             required: true,
         }
+    }],
+    occasions: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Occasion'
     }]
 }, {
     timestamps: true,

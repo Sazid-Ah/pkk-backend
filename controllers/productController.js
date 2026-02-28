@@ -9,7 +9,14 @@ const getProducts = asyncHandler(async (req, res) => {
     const limit = parseInt(req.query.limit) || 0;
     const skip = (page - 1) * limit;
 
-    const products = await Product.find({})
+    const { occasionId } = req.query;
+    let query = {};
+    if (occasionId) {
+        query.occasions = occasionId;
+    }
+
+    const products = await Product.find(query)
+        .populate('occasions')
         .skip(skip)
         .limit(limit);
 
@@ -36,6 +43,7 @@ const createProduct = asyncHandler(async (req, res) => {
         weight,
         type: type || 'individual',
         includedItems: type === 'package' ? includedItems : [],
+        occasions: req.body.occasions || [],
     });
 
     res.status(201).json(product);
@@ -70,7 +78,11 @@ const updateProduct = asyncHandler(async (req, res) => {
             product.includedItems = [];
         }
 
-        const updatedProduct = await product.save();
+        if (req.body.occasions) {
+            product.occasions = req.body.occasions;
+        }
+
+        const updatedProduct = await (await product.save()).populate('occasions');
         res.json(updatedProduct);
     } else {
         res.status(404);
