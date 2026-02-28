@@ -49,10 +49,7 @@ const registerUser = asyncHandler(async (req, res) => {
         username,
         email,
         password: hashedPassword,
-        phoneNumber: req.body.phoneNumber || '',
         role: role || 'user',
-        isOnline: true,
-        lastActiveAt: new Date(),
     });
 
     if (user) {
@@ -61,53 +58,18 @@ const registerUser = asyncHandler(async (req, res) => {
 
         const accessToken = generateAccessToken(user._id);
         const refreshToken = generateRefreshToken(user._id);
-        const sessionId = crypto.randomBytes(16).toString('hex');
 
         // Save refresh token
         user.refreshToken = refreshToken;
-
-        // Record login history
-        const loginEntry = {
-            timestamp: new Date(),
-            ipAddress: req.ip || req.connection.remoteAddress,
-            userAgent: req.get('user-agent'),
-            device: req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop'
-        };
-        user.loginHistory = [loginEntry];
-
         await user.save();
-
-        // Log activity (non-blocking)
-        try {
-            console.log('[authController] Calling logActivity for registration...');
-            await logActivity(
-                user._id,
-                'User',
-                user.username,
-                user.email,
-                user.role || 'user',
-                'registration',
-                req.ip || req.connection.remoteAddress,
-                req.get('user-agent'),
-                req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
-                sessionId,
-                `New user registered successfully`
-            );
-        } catch (logErr) {
-            console.error('Activity log failed (non-fatal):', logErr.message);
-        }
 
         res.status(201).json({
             _id: user.id,
             username: user.username,
             email: user.email,
             role: user.role,
-            phoneNumber: user.phoneNumber,
-            isOnline: user.isOnline,
-            lastActiveAt: user.lastActiveAt,
             token: accessToken,
             refreshToken: refreshToken,
-            sessionId: sessionId,
         });
     } else {
         res.status(400);
@@ -524,7 +486,6 @@ const logout = asyncHandler(async (req, res) => {
         if (isPandit) userTypeDesc = 'Pandit';
 
         // Log activity in ActivityLog collection
-        console.log(`[logActivity] Calling create for 'logout' for user ${user.email}...`);
         await logActivity(
             user._id,
             userTypeDesc,
@@ -707,7 +668,7 @@ const requestRegisterOTP = asyncHandler(async (req, res) => {
 
     // Send OTP via email
     try {
-        await sendOTPEmail(email, otp, 'Valued Customer', 'Registration OTP - PKK App', 'Email Verification');
+        await sendOTPEmail(email, otp, 'Valued Customer');
         res.status(200).json({
             success: true,
             message: 'OTP sent to your email',

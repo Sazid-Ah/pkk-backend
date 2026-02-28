@@ -14,14 +14,14 @@ const createTransporter = () => {
 };
 
 // Send OTP email
-const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP - PKK App', title = 'Password Reset Request') => {
+const sendOTPEmail = async (email, otp, username) => {
     try {
         const transporter = createTransporter();
 
         const mailOptions = {
             from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
-            subject: subject,
+            subject: 'Password Reset OTP - PKK App',
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -40,11 +40,11 @@ const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP 
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>${title}</h1>
+                            <h1>Password Reset Request</h1>
                         </div>
                         <div class="content">
                             <p>Hello <strong>${username}</strong>,</p>
-                            <p>Please use the following OTP (One-Time Password) to proceed:</p>
+                            <p>You have requested to reset your password. Please use the following OTP (One-Time Password) to proceed:</p>
                             
                             <div class="otp-box">
                                 <div class="otp-code">${otp}</div>
@@ -54,7 +54,7 @@ const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP 
                                 <strong>⚠️ Important:</strong> This OTP will expire in ${process.env.OTP_EXPIRY_MINUTES || 10} minutes.
                             </div>
                             
-                            <p>If you didn't request this, please ignore this email or contact support if you have concerns.</p>
+                            <p>If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
                             
                             <p>Best regards,<br>PKK Team</p>
                         </div>
