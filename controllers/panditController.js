@@ -6,28 +6,45 @@ const bcrypt = require('bcryptjs');
 // @route   GET /api/pandits
 // @access  Public
 const getPandits = asyncHandler(async (req, res) => {
-    const { lat, lng } = req.query;
+    const { lat, lng, sort } = req.query;
 
     let query = {};
+    let sortQuery = {};
 
     if (lat && lng) {
-        query.location = {
-            $nearSphere: {
-                $geometry: {
-                    type: "Point",
-                    coordinates: [parseFloat(lng), parseFloat(lat)]
-                },
-                $maxDistance: 50000 // 50km radius, adjustable
-            }
-        };
+        if (sort === 'rating') {
+            // Use geoWithin for 100km radius when sorting by rating to allow custom sort
+            // $nearSphere always sorts by proximity, which we want to avoid for Top Pandits
+            query.location = {
+                $geoWithin: {
+                    $centerSphere: [[parseFloat(lng), parseFloat(lat)], 100 / 6378.1] // 100km radius
+                }
+            };
+        } else {
+            // Default proximity sort
+            query.location = {
+                $nearSphere: {
+                    $geometry: {
+                        type: "Point",
+                        coordinates: [parseFloat(lng), parseFloat(lat)]
+                    },
+                    $maxDistance: 50000 // 50km radius
+                }
+            };
+        }
+    }
+
+    if (sort === 'rating') {
+        sortQuery = { rating: -1, isFeatured: -1 };
     }
 
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 0; // 0 means no limit by default if not specified
+    const limit = parseInt(req.query.limit) || 0;
     const skip = (page - 1) * limit;
 
     const pandits = await Pandit.find(query)
         .populate('occasions')
+        .sort(sortQuery)
         .skip(skip)
         .limit(limit);
 
