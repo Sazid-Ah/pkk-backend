@@ -11,27 +11,17 @@ const getPandits = asyncHandler(async (req, res) => {
     let query = {};
     let sortQuery = {};
 
-    if (lat && lng) {
-        if (sort === 'rating') {
-            // Use geoWithin for 100km radius when sorting by rating to allow custom sort
-            // $nearSphere always sorts by proximity, which we want to avoid for Top Pandits
-            query.location = {
-                $geoWithin: {
-                    $centerSphere: [[parseFloat(lng), parseFloat(lat)], 100 / 6378.1] // 100km radius
-                }
-            };
-        } else {
-            // Default proximity sort
-            query.location = {
-                $nearSphere: {
-                    $geometry: {
-                        type: "Point",
-                        coordinates: [parseFloat(lng), parseFloat(lat)]
-                    },
-                    $maxDistance: 50000 // 50km radius
-                }
-            };
-        }
+    if (lat && lng && sort !== 'rating') {
+        // Default proximity sort (within 50km)
+        query.location = {
+            $nearSphere: {
+                $geometry: {
+                    type: "Point",
+                    coordinates: [parseFloat(lng), parseFloat(lat)]
+                },
+                $maxDistance: 50000 // 50km radius
+            }
+        };
     }
 
     if (sort === 'rating') {
