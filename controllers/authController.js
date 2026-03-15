@@ -668,7 +668,7 @@ const requestRegisterOTP = asyncHandler(async (req, res) => {
 
     // Send OTP via email
     try {
-        await sendOTPEmail(email, otp, 'Valued Customer');
+        await sendOTPEmail(email, otp, 'Valued Customer', 'Registration OTP - PKK App', 'Email Verification');
         res.status(200).json({
             success: true,
             message: 'OTP sent to your email',
