@@ -2,28 +2,59 @@ const asyncHandler = require('express-async-handler');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const Order = require('../models/Order');
+const GlobalSettings = require('../models/GlobalSettings');
+
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_S6POX6kqvP3xla',
-    key_secret: process.env.RAZORPAY_KEY_SECRET || 'wTk7DwC7qpzZ6s3iTVpkJXz7',
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 // @desc    Create new order
 // @route   POST /api/orders
 // @access  Private
 const addOrderItems = asyncHandler(async (req, res) => {
-    const { items, totalAmount, shippingAddress, paymentMethod } = req.body;
+    const { items, shippingAddress, paymentMethod } = req.body;
 
     if (!items || items.length === 0) {
         res.status(400);
         throw new Error('No order items');
     }
 
+    // 1. Fetch Global Settings for Discount
+    const settings = await GlobalSettings.findOne();
+    const discountPercentage = (settings && settings.isDiscountActive) ? settings.discountPercentage : 0;
+
+    // 2. Calculate Totals Server-side
+    let subtotal = 0;
+    let productGst = 0;
+    let serviceGst = 0;
+    let productTotalForDiscount = 0;
+
+    items.forEach(item => {
+        const itemTotal = item.price * item.quantity;
+        subtotal += itemTotal;
+        
+        if (item.type === 'product') {
+            productGst += itemTotal * 0.05; // 5% GST for products
+            productTotalForDiscount += itemTotal;
+        } else {
+            serviceGst += itemTotal * 0.18; // 18% GST for services
+        }
+    });
+
+    const discountAmount = productTotalForDiscount * (discountPercentage / 100);
+    const gstTotal = productGst + serviceGst;
+    const finalTotal = subtotal - discountAmount + gstTotal;
+
     const order = new Order({
         user: req.user._id,
         items,
-        totalAmount,
+        totalAmount: finalTotal, // Use server-calculated total
+        discountAmount,
+        discountPercentage,
+        gstAmount: gstTotal,
         shippingAddress,
         paymentMethod: paymentMethod || 'Razorpay',
         // Auto-confirm COD orders since there's no payment gateway confirmation needed
@@ -34,11 +65,12 @@ const addOrderItems = asyncHandler(async (req, res) => {
     res.status(201).json(createdOrder);
 });
 
+
 // @desc    Get logged in user orders
 // @route   GET /api/orders/myorders
 // @access  Private
 const getMyOrders = asyncHandler(async (req, res) => {
-    const orders = await Order.find({ user: req.user._id });
+    const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
     res.json(orders);
 });
 
@@ -46,8 +78,18 @@ const getMyOrders = asyncHandler(async (req, res) => {
 // @route   GET /api/orders
 // @access  Private/Admin/Employee
 const getOrders = asyncHandler(async (req, res) => {
-    const orders = await Order.find({}).populate('user', 'id username');
-    res.json(orders);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const total = await Order.countDocuments({});
+    const orders = await Order.find({})
+        .populate('user', 'id username')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.json({ orders, page, pages: Math.ceil(total / limit), total });
 });
 
 // @desc    Update order status
@@ -92,6 +134,12 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
 
         const rzpOrder = await razorpay.orders.create(options);
 
+        if (!rzpOrder || !rzpOrder.id) {
+            console.error('Razorpay returned invalid order:', rzpOrder);
+            res.status(500);
+            throw new Error('Razorpay order creation failed — check API credentials.');
+        }
+
         // Save razorpay order ID to our DB
         order.razorpayOrderId = rzpOrder.id;
         await order.save();
@@ -100,7 +148,7 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
             razorpayOrderId: rzpOrder.id,
             amount: rzpOrder.amount,
             currency: rzpOrder.currency,
-            key: process.env.RAZORPAY_KEY_ID // Front-end needs the public key
+            key: process.env.RAZORPAY_KEY_ID,
         });
     } catch (error) {
         console.error('Razorpay Error:', error);
@@ -121,37 +169,89 @@ const verifyPayment = asyncHandler(async (req, res) => {
         throw new Error('Order not found');
     }
 
+    // Idempotency: already verified
+    if (order.paymentStatus === 'Paid') {
+        return res.json({ message: 'Payment already verified', order });
+    }
+
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
         res.status(400);
         throw new Error('Missing payment details');
     }
 
-    // Verify signature
-    const body = razorpayOrderId + "|" + razorpayPaymentId;
+    const body = razorpayOrderId + '|' + razorpayPaymentId;
     const expectedSignature = crypto
         .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-        .update(body.toString())
+        .update(body)
         .digest('hex');
 
-    const isAuthentic = expectedSignature === razorpaySignature;
-
-    if (isAuthentic) {
-        // Payment is valid
+    if (expectedSignature === razorpaySignature) {
         order.razorpayPaymentId = razorpayPaymentId;
         order.razorpaySignature = razorpaySignature;
         order.paymentStatus = 'Paid';
-        order.status = 'Confirmed'; // Automatically confirm order on payment
+        order.status = 'Confirmed';
         const updatedOrder = await order.save();
-
-        res.json({ message: 'Payment verified successfully', order: updatedOrder });
+        return res.json({ message: 'Payment verified successfully', order: updatedOrder });
     } else {
-        // Invalid signature
         order.paymentStatus = 'Failed';
+        order.status = 'Cancelled';
         await order.save();
-
         res.status(400);
         throw new Error('Invalid payment signature');
     }
+});
+
+// @desc    Cancel an order (failed/dismissed payment)
+// @route   POST /api/orders/:id/cancel
+// @access  Private
+const cancelOrder = asyncHandler(async (req, res) => {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+        res.status(404);
+        throw new Error('Order not found');
+    }
+
+    if (order.user.toString() !== req.user._id.toString()) {
+        res.status(403);
+        throw new Error('Not authorized');
+    }
+
+    // Idempotency: already in a terminal state
+    if (['Cancelled', 'Completed'].includes(order.status)) {
+        return res.json({ message: 'Order already in terminal state', order });
+    }
+
+    // Enforce 5-minute cancellation window
+    const fiveMinMs = 5 * 60 * 1000;
+    if (new Date() - new Date(order.createdAt) > fiveMinMs) {
+        res.status(400);
+        throw new Error('Orders can only be cancelled within 5 minutes of placing them.');
+    }
+
+    order.status = 'Cancelled';
+    order.paymentStatus = 'Failed';
+    const updatedOrder = await order.save();
+    res.json({ message: 'Order cancelled', order: updatedOrder });
+});
+
+// @desc    Get single order by ID
+// @route   GET /api/orders/:id
+// @access  Private
+const getOrderById = asyncHandler(async (req, res) => {
+    const order = await Order.findById(req.params.id).populate('user', 'username fullName email phoneNumber');
+
+    if (!order) {
+        res.status(404);
+        throw new Error('Order not found');
+    }
+
+    if (order.user._id.toString() !== req.user._id.toString() && req.user.role !== 'admin' && req.user.role !== 'employee') {
+        res.status(403);
+        throw new Error('Not authorized');
+    }
+
+    res.json(order);
 });
 
 // @desc    Get order history with filters
@@ -189,8 +289,10 @@ module.exports = {
     addOrderItems,
     getMyOrders,
     getOrders,
+    getOrderById,
     updateOrderToStatus,
     createRazorpayOrder,
     verifyPayment,
+    cancelOrder,
     getOrderHistory,
 };

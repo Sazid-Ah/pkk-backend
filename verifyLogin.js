@@ -14,7 +14,7 @@ const verifyLogin = async () => {
         const username = process.env.ADMIN_USERNAME || 'admin';
         const password = process.env.ADMIN_PASSWORD || '123456';
 
-        console.log(`Checking for user: ${username} with password: ${password}`);
+        console.log(`Checking for user: ${username}`);
 
         // Check User collection
         const user = await User.findOne({ username });

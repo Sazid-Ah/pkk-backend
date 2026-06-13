@@ -54,9 +54,7 @@ const seedAdmin = async () => {
             address: 'Headquarters'
         });
 
-        console.log(`Admin user created successfully!`);
-        console.log(`Username: ${username}`);
-        console.log(`Password: ${password}`);
+        console.log(`Admin user created successfully! Username: ${username}`);
 
         process.exit();
     } catch (error) {

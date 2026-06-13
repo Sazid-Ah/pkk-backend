@@ -15,7 +15,10 @@ const {
     getUsers,
     getLoginLogs,
     requestRegisterOTP,
-    verifyRegisterOTP
+    verifyRegisterOTP,
+    requestDeleteOTP,
+    deleteAccount,
+    undoDeleteAccount
 } = require('../controllers/authController');
 const { protect, admin, employee } = require('../middleware/authMiddleware');
 
@@ -33,5 +36,10 @@ router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.get('/users', protect, employee, getUsers);
 router.get('/login-logs', protect, admin, getLoginLogs);
+
+// Account deletion routes
+router.post('/request-delete-otp', authLimiter, requestDeleteOTP);
+router.post('/delete-account', authLimiter, deleteAccount);
+router.post('/undo-delete-account', authLimiter, undoDeleteAccount);
 
 module.exports = router;

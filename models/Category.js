@@ -1,28 +1,18 @@
 const mongoose = require('mongoose');
 const { generateTranslations } = require('../utils/translateUtils');
 
-const occasionSchema = new mongoose.Schema({
+console.log('Loading Category model...');
+
+const categorySchema = new mongoose.Schema({
     name: {
         type: String,
-        required: [true, 'Please add an occasion name'],
+        required: [true, 'Please add a category name'],
+        unique: true,
         trim: true,
-    },
-    englishName: {
-        type: String,
-        required: [true, 'Please add an English name'],
-        trim: true,
-    },
-    icon: {
-        type: String,
-        default: '📅', // Default emoji
     },
     image: {
         type: String,
         default: '',
-    },
-    gradient: {
-        type: [String],
-        default: ['#FF6B6B', '#C92A2A'], // Default gradient colors
     },
     translations: {
         type: Object,
@@ -32,7 +22,7 @@ const occasionSchema = new mongoose.Schema({
     timestamps: true,
 });
 
-occasionSchema.pre('save', async function () {
+categorySchema.pre('save', async function () {
     if ((this.isNew || this.isModified('name')) &&
         (!this.translations || Object.keys(this.translations).length === 0)) {
         try {
@@ -41,4 +31,12 @@ occasionSchema.pre('save', async function () {
     }
 });
 
-module.exports = mongoose.model('Occasion', occasionSchema);
+console.log('✓ Category model schema defined');
+
+try {
+    module.exports = mongoose.model('Category', categorySchema);
+    console.log('✓ Category model exported');
+} catch (error) {
+    console.error('❌ Error exporting Category model:', error.message);
+    throw error;
+}

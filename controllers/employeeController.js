@@ -73,6 +73,19 @@ const createEmployee = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Get single employee by ID
+// @route   GET /api/employees/:id
+// @access  Private/Admin
+const getEmployeeById = asyncHandler(async (req, res) => {
+    const employee = await Employee.findById(req.params.id).select('-password');
+    if (employee) {
+        res.json(employee);
+    } else {
+        res.status(404);
+        throw new Error('Employee not found');
+    }
+});
+
 // @desc    Update employee details
 // @route   PUT /api/employees/:id
 // @access  Private/Admin
@@ -121,6 +134,7 @@ const deleteEmployee = asyncHandler(async (req, res) => {
 
 module.exports = {
     getEmployees,
+    getEmployeeById,
     createEmployee,
     updateEmployee,
     deleteEmployee,

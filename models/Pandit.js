@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 
+const { generateTranslations } = require('../utils/translateUtils');
+
+console.log('Loading Pandit model...');
+
 const panditSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -57,6 +61,10 @@ const panditSchema = new mongoose.Schema({
         type: Number,
         default: 0,
     },
+    numReviews: {
+        type: Number,
+        default: 0,
+    },
     price: {
         type: String, // Can be range like "₹2000-5000" or fixed amount
         required: [true, 'Please add price info'],
@@ -80,6 +88,14 @@ const panditSchema = new mongoose.Schema({
             default: [0, 0]
         }
     },
+    experience: {
+        type: Number,
+        default: 0,
+    },
+    isVerified: {
+        type: Boolean,
+        default: false,
+    },
     isFeatured: {
         type: Boolean,
         default: false,
@@ -87,11 +103,47 @@ const panditSchema = new mongoose.Schema({
     occasions: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Occasion'
-    }]
+    }],
+    translations: {
+        type: Object,
+        default: {}
+    },
+    refreshToken: {
+        type: String,
+        default: null,
+    },
 }, {
     timestamps: true,
 });
 
 panditSchema.index({ location: '2dsphere' });
 
-module.exports = mongoose.model('Pandit', panditSchema);
+
+panditSchema.pre('save', function (next) {
+    if ((this.isNew || this.isModified('specialty') || this.isModified('about')) &&
+        (!this.translations || Object.keys(this.translations).length === 0)) {
+        generateTranslations({
+            specialty: this.specialty || '',
+            about: this.about || '',
+        })
+        .then(translations => {
+            this.translations = translations;
+            next();
+        })
+        .catch(e => {
+            next();
+        });
+    } else {
+        next();
+    }
+});
+
+console.log('✓ Pandit model schema defined');
+
+try {
+    module.exports = mongoose.model('Pandit', panditSchema);
+    console.log('✓ Pandit model exported');
+} catch (error) {
+    console.error('❌ Error exporting Pandit model:', error.message);
+    throw error;
+}

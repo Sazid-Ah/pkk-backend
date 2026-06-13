@@ -9,10 +9,13 @@ const getProducts = asyncHandler(async (req, res) => {
     const limit = parseInt(req.query.limit) || 0;
     const skip = (page - 1) * limit;
 
-    const { occasionId } = req.query;
+    const { occasionId, categoryId } = req.query;
     let query = {};
     if (occasionId) {
         query.occasions = occasionId;
+    }
+    if (categoryId) {
+        query.category = categoryId;
     }
 
     const products = await Product.find(query)
@@ -23,11 +26,23 @@ const getProducts = asyncHandler(async (req, res) => {
     res.json(products);
 });
 
+// @desc    Get single product by ID
+// @route   GET /api/products/:id
+// @access  Public
+const getProductById = asyncHandler(async (req, res) => {
+    const product = await Product.findById(req.params.id).populate('occasions');
+    if (!product) {
+        res.status(404);
+        throw new Error('Product not found');
+    }
+    res.json(product);
+});
+
 // @desc    Create a product
 // @route   POST /api/products
 // @access  Private/Admin
 const createProduct = asyncHandler(async (req, res) => {
-    const { name, category, price, image, description, weight, type, includedItems } = req.body;
+    const { name, category, price, image, description, weight, type, includedItems, gstPercentage } = req.body;
 
     let finalPrice = price;
     if (type === 'package' && includedItems && includedItems.length > 0) {
@@ -44,6 +59,7 @@ const createProduct = asyncHandler(async (req, res) => {
         type: type || 'individual',
         includedItems: type === 'package' ? includedItems : [],
         occasions: req.body.occasions || [],
+        gstPercentage: gstPercentage || 0,
     });
 
     res.status(201).json(product);
@@ -61,6 +77,7 @@ const updateProduct = asyncHandler(async (req, res) => {
         product.image = req.body.image || product.image;
         product.description = req.body.description || product.description;
         product.weight = req.body.weight || product.weight;
+        product.gstPercentage = req.body.gstPercentage !== undefined ? req.body.gstPercentage : product.gstPercentage;
 
         if (req.body.type) {
             product.type = req.body.type;
@@ -107,6 +124,7 @@ const deleteProduct = asyncHandler(async (req, res) => {
 
 module.exports = {
     getProducts,
+    getProductById,
     createProduct,
     updateProduct,
     deleteProduct,

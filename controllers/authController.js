@@ -3,6 +3,8 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
+const DeletionRequest = require('../models/DeletionRequest');
+const Order = require('../models/Order');
 const RegistrationOTP = require('../models/RegistrationOTP');
 const { sendOTPEmail, sendPasswordResetConfirmation } = require('../utils/emailService');
 const { logActivity } = require('./activityLogController');
@@ -11,12 +13,16 @@ const { logActivity } = require('./activityLogController');
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
-    const { username, email, password, role } = req.body;
+    let { username, email, password, fullName } = req.body;
 
     if (!username || !email || !password) {
         res.status(400);
         throw new Error('Please add all fields');
     }
+
+    // Normalize inputs
+    username = username.trim().toLowerCase();
+    email = email.trim().toLowerCase();
 
     // Validate email format
     const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
@@ -44,12 +50,13 @@ const registerUser = asyncHandler(async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create user
+    // Create user - hardcode role to 'user' for security
     const user = await User.create({
         username,
+        fullName: fullName ? fullName.trim() : '',
         email,
         password: hashedPassword,
-        role: role || 'user',
+        role: 'user',
     });
 
     if (user) {
@@ -66,6 +73,7 @@ const registerUser = asyncHandler(async (req, res) => {
         res.status(201).json({
             _id: user.id,
             username: user.username,
+            fullName: user.fullName,
             email: user.email,
             role: user.role,
             token: accessToken,
@@ -81,40 +89,60 @@ const registerUser = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/login
 // @access  Public
 const loginUser = asyncHandler(async (req, res) => {
-    const { username, password, rememberMe } = req.body;
+    let { username, password, rememberMe } = req.body;
 
-    // 1. Try finding in User collection (Customers only — role must be 'user' or unset)
-    let user = await User.findOne({ username });
+    if (username) {
+        username = username.trim().toLowerCase();
+    }
+
+    // 1. Try finding in Employee collection first (Admin/Staff have highest priority)
+    const Employee = require('../models/Employee');
+    let user = await Employee.findOne({ username });
     let isEmployee = false;
-
-    // Skip if the found user is not a customer (e.g. role was set to admin/employee in User collection)
-    if (user && user.role && user.role !== 'user') {
-        user = null;
-    }
-
-    // 2. If not found, try Employee collection (Admin/Staff)
-    if (!user) {
-        const Employee = require('../models/Employee');
-        user = await Employee.findOne({ username });
-        if (user) {
-            isEmployee = true;
-        }
-    }
-
-    // 3. If not found, try Pandit collection
     let isPandit = false;
+
+    if (user && (await bcrypt.compare(password, user.password))) {
+        isEmployee = true;
+    } else {
+        user = null; // Clear if not found or password mismatch
+    }
+
+    // 2. If not found, try Pandit collection
     if (!user) {
         const Pandit = require('../models/Pandit');
         user = await Pandit.findOne({ username });
-        if (user) {
+        if (user && (await bcrypt.compare(password, user.password))) {
             isPandit = true;
+        } else {
+            user = null;
         }
     }
 
-    if (user && (await bcrypt.compare(password, user.password))) {
+    // 3. Finally, try User collection (Customers)
+    if (!user) {
+        user = await User.findOne({ username });
+        // Validation: Customers must have role 'user' or no role
+        if (user && user.role && user.role !== 'user') {
+            user = null;
+        }
+        if (user && !(await bcrypt.compare(password, user.password))) {
+            user = null;
+        }
+    }
+
+    if (user) {
+        // Check if account is pending deletion
+        if (user.isDeletionPending) {
+            return res.status(403).json({
+                success: false,
+                message: 'Your account is pending deletion. Please contact support if you wish to cancel this request.',
+                errorCode: 'DELETION_PENDING'
+            });
+        }
+
         const accessToken = generateAccessToken(user._id, rememberMe);
         const refreshToken = generateRefreshToken(user._id);
-        const sessionId = crypto.randomBytes(16).toString('hex');
+        const sessionId = crypto.randomBytes(32).toString('hex');
 
         // Record login history (keep for backward compatibility)
         const loginEntry = {
@@ -137,10 +165,7 @@ const loginUser = asyncHandler(async (req, res) => {
         user.isOnline = true;
         user.lastActiveAt = new Date();
 
-        // Save refresh token (only for Users, not Employees or Pandits)
-        if (!isEmployee && !isPandit) {
-            user.refreshToken = refreshToken;
-        }
+        user.refreshToken = refreshToken;
 
         await user.save();
 
@@ -170,26 +195,27 @@ const loginUser = asyncHandler(async (req, res) => {
         res.json({
             _id: user.id,
             username: user.username,
+            fullName: user.fullName || '',
             email: user.email,
             role: isPandit ? 'pandit' : (isEmployee ? (user.role || 'employee') : (user.role || 'user')),
             phoneNumber: user.phoneNumber,
-            avatar: user.avatar,
+            avatar: user.avatar || user.image,
             addresses: user.addresses,
             isOnline: user.isOnline,
             lastActiveAt: user.lastActiveAt,
             token: accessToken,
-            refreshToken: !isEmployee ? refreshToken : undefined,
+            refreshToken,
             sessionId: sessionId,
             // Optional: return full profile if employee
             ...(isEmployee ? {
-                fullName: user.fullName,
                 position: user.position
             } : {}),
             ...(isPandit ? {
                 name: user.name,
                 specialty: user.specialty,
                 isFeatured: user.isFeatured
-            } : {})
+            } : {}),
+            isFirstOrder: !(await Order.exists({ user: user._id }))
         });
     } else {
         res.status(401);
@@ -222,9 +248,17 @@ const loginCustomer = asyncHandler(async (req, res) => {
         throw new Error('Invalid credentials');
     }
 
+    if (user.isDeletionPending) {
+        return res.status(403).json({
+            success: false,
+            message: 'Your account is pending deletion. Please contact support if you wish to cancel this request.',
+            errorCode: 'DELETION_PENDING'
+        });
+    }
+
     const accessToken = generateAccessToken(user._id, rememberMe);
     const refreshToken = generateRefreshToken(user._id);
-    const sessionId = crypto.randomBytes(16).toString('hex');
+    const sessionId = crypto.randomBytes(32).toString('hex');
 
     const loginEntry = {
         timestamp: new Date(),
@@ -260,6 +294,7 @@ const loginCustomer = asyncHandler(async (req, res) => {
     res.json({
         _id: user.id,
         username: user.username,
+        fullName: user.fullName || '',
         email: user.email,
         role: user.role || 'user',
         phoneNumber: user.phoneNumber,
@@ -270,6 +305,7 @@ const loginCustomer = asyncHandler(async (req, res) => {
         token: accessToken,
         refreshToken,
         sessionId,
+        isFirstOrder: !(await Order.exists({ user: user._id })),
     });
 });
 
@@ -277,13 +313,14 @@ const loginCustomer = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/forgot-password
 // @access  Public
 const forgotPassword = asyncHandler(async (req, res) => {
-    const { email } = req.body;
+    let { email } = req.body;
 
     if (!email) {
         res.status(400);
         throw new Error('Please provide an email');
     }
 
+    email = email.trim().toLowerCase();
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -291,8 +328,8 @@ const forgotPassword = asyncHandler(async (req, res) => {
         throw new Error('No user found with this email');
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 6-digit OTP using cryptographically secure random
+    const otp = crypto.randomInt(100000, 1000000).toString();
 
     // Set OTP and expiry (10 minutes from now)
     const otpExpiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES) || 10;
@@ -317,17 +354,69 @@ const forgotPassword = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Request Account Deletion OTP
+// @route   POST /api/auth/request-delete-otp
+// @access  Public
+const requestDeleteOTP = asyncHandler(async (req, res) => {
+    let { email, password } = req.body;
+
+    if (!email || !password) {
+        res.status(400);
+        throw new Error('Please provide email and password');
+    }
+
+    email = email.trim().toLowerCase();
+    const user = await User.findOne({ email });
+
+    if (!user) {
+        res.status(404);
+        throw new Error('No user found with this email');
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+        res.status(401);
+        throw new Error('Incorrect password');
+    }
+
+    // Generate 6-digit OTP using cryptographically secure random
+    const otp = crypto.randomInt(100000, 1000000).toString();
+
+    // Set OTP and expiry (10 minutes)
+    user.otp = otp;
+    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+
+    // Send OTP via email with specific deletion theme
+    try {
+        await sendOTPEmail(user.email, otp, user.username, 'Account Deletion OTP - PKK App', 'Account Deletion Request');
+        res.status(200).json({
+            success: true,
+            message: 'Deletion verification code sent to your email',
+            email: user.email,
+        });
+    } catch (error) {
+        user.otp = undefined;
+        user.otpExpiry = undefined;
+        await user.save();
+        res.status(500);
+        throw new Error('Failed to send verification code. Please try again.');
+    }
+});
+
 // @desc    Verify OTP
 // @route   POST /api/auth/verify-otp
 // @access  Public
 const verifyOTP = asyncHandler(async (req, res) => {
-    const { email, otp } = req.body;
+    let { email, otp } = req.body;
 
     if (!email || !otp) {
         res.status(400);
         throw new Error('Please provide email and OTP');
     }
 
+    email = email.trim().toLowerCase();
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -367,12 +456,14 @@ const verifyOTP = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/reset-password
 // @access  Public
 const resetPassword = asyncHandler(async (req, res) => {
-    const { email, resetToken, newPassword } = req.body;
+    let { email, resetToken, newPassword } = req.body;
 
     if (!email || !resetToken || !newPassword) {
         res.status(400);
         throw new Error('Please provide all required fields');
     }
+
+    email = email.trim().toLowerCase();
 
     if (newPassword.length < 6) {
         res.status(400);
@@ -421,10 +512,15 @@ const refreshToken = asyncHandler(async (req, res) => {
 
     try {
         // Verify refresh token
-        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'abc123456');
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
 
-        // Find user with this refresh token
-        const user = await User.findOne({ _id: decoded.id, refreshToken });
+        // Find user in User, Employee, or Pandit collections
+        const Employee = require('../models/Employee');
+        const Pandit = require('../models/Pandit');
+        const user =
+            (await User.findOne({ _id: decoded.id, refreshToken })) ||
+            (await Employee.findOne({ _id: decoded.id, refreshToken })) ||
+            (await Pandit.findOne({ _id: decoded.id, refreshToken }));
 
         if (!user) {
             res.status(401);
@@ -476,9 +572,7 @@ const logout = asyncHandler(async (req, res) => {
         user.isOnline = false;
         user.lastActiveAt = new Date();
 
-        if (!isEmployee && !isPandit) {
-            user.refreshToken = undefined;
-        }
+        user.refreshToken = undefined;
         await user.save();
 
         let userTypeDesc = 'User';
@@ -514,8 +608,15 @@ const updateProfile = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (user) {
-        user.username = req.body.username || user.username;
-        user.email = req.body.email || user.email;
+        if (req.body.username) {
+            user.username = req.body.username.trim().toLowerCase();
+        }
+        if (req.body.fullName !== undefined) {
+            user.fullName = req.body.fullName.trim();
+        }
+        if (req.body.email) {
+            user.email = req.body.email.trim().toLowerCase();
+        }
         user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
         user.avatar = req.body.avatar || user.avatar;
 
@@ -533,10 +634,11 @@ const updateProfile = asyncHandler(async (req, res) => {
         res.json({
             _id: updatedUser.id,
             username: updatedUser.username,
+            fullName: updatedUser.fullName,
             email: updatedUser.email,
             phoneNumber: updatedUser.phoneNumber,
             role: updatedUser.role,
-            avatar: updatedUser.avatar,
+            avatar: updatedUser.avatar || updatedUser.image,
             addresses: updatedUser.addresses,
             token: generateAccessToken(updatedUser._id), // Optional: refresh token on major update
         });
@@ -564,7 +666,16 @@ const getMe = asyncHandler(async (req, res) => {
         }
     }
 
+    // Map image to avatar for frontend consistency if needed
+    if (!me.avatar && me.image) {
+        me.avatar = me.image;
+    }
+
     // Just return it with all necessary fields
+
+    // Check if it's the customer's first order
+    me.isFirstOrder = !(await Order.exists({ user: req.user._id }));
+
     res.status(200).json(me);
 });
 
@@ -624,14 +735,12 @@ const getLoginLogs = asyncHandler(async (req, res) => {
 // Generate Access JWT
 const generateAccessToken = (id, rememberMe = false) => {
     const expiresIn = rememberMe ? '30d' : '7d';
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'abc123456', {
-        expiresIn,
-    });
+    return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn });
 };
 
 // Generate Refresh JWT
 const generateRefreshToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'abc123456', {
+    return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET, {
         expiresIn: '30d',
     });
 };
@@ -640,12 +749,14 @@ const generateRefreshToken = (id) => {
 // @route   POST /api/auth/register-otp
 // @access  Public
 const requestRegisterOTP = asyncHandler(async (req, res) => {
-    const { email } = req.body;
+    let { email } = req.body;
 
     if (!email) {
         res.status(400);
         throw new Error('Please provide an email');
     }
+
+    email = email.trim().toLowerCase();
 
     // Check if user already exists
     const userExists = await User.findOne({ email });
@@ -654,8 +765,8 @@ const requestRegisterOTP = asyncHandler(async (req, res) => {
         throw new Error('Email already exists');
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 6-digit OTP using cryptographically secure random
+    const otp = crypto.randomInt(100000, 1000000).toString();
     const otpExpiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES) || 10;
     const otpExpiry = new Date(Date.now() + otpExpiryMinutes * 60 * 1000);
 
@@ -684,12 +795,14 @@ const requestRegisterOTP = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/verify-register-otp
 // @access  Public
 const verifyRegisterOTP = asyncHandler(async (req, res) => {
-    const { email, otp } = req.body;
+    let { email, otp } = req.body;
 
     if (!email || !otp) {
         res.status(400);
         throw new Error('Please provide email and OTP');
     }
+
+    email = email.trim().toLowerCase();
 
     const regOTP = await RegistrationOTP.findOne({ email });
 
@@ -718,6 +831,141 @@ const verifyRegisterOTP = asyncHandler(async (req, res) => {
     });
 });
 
+// @desc    Delete user account (Mark for deletion after OTP)
+// @route   POST /api/auth/delete-account
+// @access  Public
+const deleteAccount = asyncHandler(async (req, res) => {
+    let { email, password, otp } = req.body;
+
+    if (!email || !password || !otp) {
+        res.status(400);
+        throw new Error('Please provide email, password and verification code');
+    }
+
+    email = email.trim().toLowerCase();
+
+    // Find user by email
+    const user = await User.findOne({ email });
+
+    if (!user) {
+        res.status(404);
+        throw new Error('User not found');
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+        res.status(401);
+        throw new Error('Incorrect password');
+    }
+
+    // Verify OTP
+    if (user.otp !== otp || user.otpExpiry < Date.now()) {
+        res.status(400);
+        throw new Error('Invalid or expired verification code');
+    }
+
+    // Mark user as pending deletion
+    user.isDeletionPending = true;
+    user.deletionRequestedAt = new Date();
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+    await user.save();
+
+    // Create a record in DeletionRequest collection
+    await DeletionRequest.create({
+        user: user._id,
+        email: user.email,
+        status: 'pending',
+        requestedAt: user.deletionRequestedAt
+    });
+
+    // Log the deletion request
+    await logActivity(
+        user._id,
+        'User',
+        user.username,
+        user.email || '',
+        user.role || 'user',
+        'account_deletion_requested',
+        req.ip || req.connection.remoteAddress,
+        req.get('user-agent'),
+        req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
+        null,
+        `User requested account deletion via website`
+    );
+
+    res.status(200).json({
+        success: true,
+        message: 'Your account has been marked for deletion and will be permanently removed within 24 hours.',
+    });
+});
+
+// @desc    Undo account deletion (Restore account)
+// @route   POST /api/auth/undo-delete-account
+// @access  Public
+const undoDeleteAccount = asyncHandler(async (req, res) => {
+    let { username, password } = req.body;
+
+    if (!username || !password) {
+        res.status(400);
+        throw new Error('Please provide username and password');
+    }
+
+    // Try finding user (could be email or username depending on login type)
+    let user = await User.findOne({
+        $or: [
+            { email: username.trim().toLowerCase() },
+            { username: username.trim().toLowerCase() }
+        ]
+    });
+
+    if (!user) {
+        res.status(404);
+        throw new Error('User not found');
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+        res.status(401);
+        throw new Error('Incorrect password');
+    }
+
+    if (!user.isDeletionPending) {
+        res.status(400);
+        throw new Error('This account is not pending deletion');
+    }
+
+    // Restore account
+    user.isDeletionPending = false;
+    user.deletionRequestedAt = undefined;
+    await user.save();
+
+    // Remove search record in DeletionRequest
+    await DeletionRequest.deleteOne({ user: user._id });
+
+    // Log the restoration
+    await logActivity(
+        user._id,
+        'User',
+        user.username,
+        user.email || '',
+        user.role || 'user',
+        'account_deletion_cancelled',
+        req.ip || req.connection.remoteAddress,
+        req.get('user-agent'),
+        req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
+        null,
+        `User restored account successfully`
+    );
+
+    res.status(200).json({
+        success: true,
+        message: 'Account restored successfully. You can now log in.',
+    });
+});
+
 module.exports = {
     registerUser,
     loginUser,
@@ -733,4 +981,7 @@ module.exports = {
     getLoginLogs,
     requestRegisterOTP,
     verifyRegisterOTP,
+    requestDeleteOTP,
+    deleteAccount,
+    undoDeleteAccount,
 };

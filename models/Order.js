@@ -9,13 +9,27 @@ const orderSchema = new mongoose.Schema({
     items: [{
         originalId: { type: mongoose.Schema.Types.ObjectId }, // ID of product or pandit
         name: { type: String, required: true },
+        translations: { type: Object, default: {} },
         type: { type: String, enum: ['product', 'pandit'], required: true },
         quantity: { type: Number, default: 1 },
         price: { type: Number, required: true },
+        image: { type: String, default: '' },
     }],
     totalAmount: {
         type: Number,
         required: true,
+    },
+    discountAmount: {
+        type: Number,
+        default: 0,
+    },
+    discountPercentage: {
+        type: Number,
+        default: 0,
+    },
+    gstAmount: {
+        type: Number,
+        default: 0,
     },
     status: {
         type: String,
@@ -23,7 +37,14 @@ const orderSchema = new mongoose.Schema({
         default: 'Pending',
     },
     shippingAddress: {
-        type: String, // Simple string for now
+        label:    { type: String, default: '' },
+        street:   { type: String, default: '' },
+        city:     { type: String, default: '' },
+        state:    { type: String, default: '' },
+        zip:      { type: String, default: '' },
+        country:  { type: String, default: 'India' },
+        landmark: { type: String, default: '' },
+        isGPS:    { type: Boolean, default: false },
     },
     razorpayOrderId: {
         type: String,

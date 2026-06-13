@@ -67,7 +67,11 @@ const employeeSchema = mongoose.Schema({
         ipAddress: String,
         userAgent: String,
         device: String
-    }]
+    }],
+    refreshToken: {
+        type: String,
+        default: null,
+    },
 }, {
     timestamps: true
 });

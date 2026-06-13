@@ -4,10 +4,36 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
 const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_S6POX6kqvP3xla',
-    key_secret: process.env.RAZORPAY_KEY_SECRET || 'wTk7DwC7qpzZ6s3iTVpkJXz7',
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
+
+// @desc    Get booked time slots for a pandit on a specific date
+// @route   GET /api/bookings/availability/:panditId?date=YYYY-MM-DD
+// @access  Private
+const getPanditAvailability = asyncHandler(async (req, res) => {
+    const { panditId } = req.params;
+    const { date } = req.query;
+
+    if (!date) {
+        res.status(400);
+        throw new Error('date query parameter is required');
+    }
+
+    const start = new Date(date);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setUTCHours(23, 59, 59, 999);
+
+    const bookings = await Booking.find({
+        pandit: panditId,
+        bookingDate: { $gte: start, $lte: end },
+        status: { $in: ['Pending', 'Confirmed'] },
+    }).select('timeSlot');
+
+    res.json({ date, bookedSlots: bookings.map(b => String(b.timeSlot)) });
+});
 
 // @desc    Create a new booking
 // @route   POST /api/bookings
@@ -20,18 +46,69 @@ const createBooking = asyncHandler(async (req, res) => {
         throw new Error('Please fill all required fields');
     }
 
+    // Prevent booking in the past
+    const slotTime = new Date(bookingDate);
+    if (slotTime < new Date()) {
+        res.status(400);
+        throw new Error('Cannot book a slot in the past');
+    }
+
+    // Check for existing booking at the same pandit + date + time slot
+    const dayStart = new Date(bookingDate);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(bookingDate);
+    dayEnd.setUTCHours(23, 59, 59, 999);
+
+    const conflict = await Booking.findOne({
+        pandit,
+        bookingDate: { $gte: dayStart, $lte: dayEnd },
+        timeSlot: String(timeSlot),
+        status: { $in: ['Pending', 'Confirmed'] },
+    });
+
+    if (conflict) {
+        res.status(409);
+        throw new Error('This time slot is already booked. Please choose a different slot.');
+    }
+
     const booking = await Booking.create({
         user: req.user._id,
         pandit,
         bookingDate,
-        timeSlot,
+        timeSlot: String(timeSlot),
         occasion,
         price,
         notes,
-        address
+        address,
     });
 
     res.status(201).json(booking);
+});
+
+// @desc    Get a single booking by ID
+// @route   GET /api/bookings/:id
+// @access  Private (booking owner or admin)
+const getBookingById = asyncHandler(async (req, res) => {
+    const booking = await Booking.findById(req.params.id)
+        .populate('pandit', 'name image specialty email')
+        .populate('user', 'username fullName email phoneNumber');
+
+    if (!booking) {
+        res.status(404);
+        throw new Error('Booking not found');
+    }
+
+    const isOwner = booking.user?._id?.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+    const isPanditOfBooking = req.user.role === 'pandit' &&
+        booking.pandit?._id?.toString() === req.user._id.toString();
+
+    if (!isOwner && !isAdmin && !isPanditOfBooking) {
+        res.status(403);
+        throw new Error('Not authorized to view this booking');
+    }
+
+    res.json(booking);
 });
 
 // @desc    Get logged in user bookings
@@ -206,6 +283,13 @@ const createRazorpayBookingOrder = asyncHandler(async (req, res) => {
 
     try {
         const rzpOrder = await razorpay.orders.create(options);
+
+        if (!rzpOrder || !rzpOrder.id) {
+            console.error('Razorpay returned invalid order:', rzpOrder);
+            res.status(500);
+            throw new Error('Razorpay order creation failed — check API credentials.');
+        }
+
         booking.razorpayOrderId = rzpOrder.id;
         booking.paymentMethod = 'Online';
         await booking.save();
@@ -214,7 +298,7 @@ const createRazorpayBookingOrder = asyncHandler(async (req, res) => {
             razorpayOrderId: rzpOrder.id,
             amount: rzpOrder.amount,
             currency: rzpOrder.currency,
-            key: process.env.RAZORPAY_KEY_ID || 'rzp_test_S6POX6kqvP3xla',
+            key: process.env.RAZORPAY_KEY_ID,
             bookingId: booking._id,
         });
     } catch (error) {
@@ -236,9 +320,19 @@ const verifyBookingPayment = asyncHandler(async (req, res) => {
         throw new Error('Booking not found');
     }
 
+    // Idempotency: already verified
+    if (booking.paymentStatus === 'Paid') {
+        return res.json({ success: true, message: 'Payment already verified', booking });
+    }
+
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+        res.status(400);
+        throw new Error('Missing payment details');
+    }
+
     const body = razorpayOrderId + '|' + razorpayPaymentId;
     const expectedSignature = crypto
-        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'wTk7DwC7qpzZ6s3iTVpkJXz7')
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
         .update(body)
         .digest('hex');
 
@@ -248,16 +342,56 @@ const verifyBookingPayment = asyncHandler(async (req, res) => {
         booking.paymentStatus = 'Paid';
         booking.paymentMethod = 'Online';
         await booking.save();
-        res.json({ success: true, message: 'Payment verified successfully', booking });
+        return res.json({ success: true, message: 'Payment verified successfully', booking });
     } else {
         booking.paymentStatus = 'Failed';
+        booking.status = 'Cancelled';
         await booking.save();
         res.status(400);
         throw new Error('Payment verification failed. Invalid signature.');
     }
 });
 
+// @desc    Cancel a booking (failed/dismissed payment)
+// @route   POST /api/bookings/:id/cancel
+// @access  Private
+const cancelBooking = asyncHandler(async (req, res) => {
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+        res.status(404);
+        throw new Error('Booking not found');
+    }
+
+    if (booking.user.toString() !== req.user._id.toString()) {
+        res.status(403);
+        throw new Error('Not authorized');
+    }
+
+    // Idempotency: already in a terminal state
+    if (['Cancelled', 'Completed'].includes(booking.status)) {
+        return res.json({ message: 'Booking already in terminal state', booking });
+    }
+
+    // Enforce 2-day window only for Confirmed bookings (Pending = payment incomplete, always cancellable)
+    if (booking.status === 'Confirmed') {
+        const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+        const timeUntilBooking = new Date(booking.bookingDate) - new Date();
+        if (timeUntilBooking < twoDaysMs) {
+            res.status(400);
+            throw new Error('Bookings can only be cancelled at least 2 days before the booking date.');
+        }
+    }
+
+    booking.status = 'Cancelled';
+    booking.paymentStatus = 'Failed';
+    const updatedBooking = await booking.save();
+    res.json({ message: 'Booking cancelled', booking: updatedBooking });
+});
+
 module.exports = {
+    getPanditAvailability,
+    getBookingById,
     createBooking,
     getMyBookings,
     getPanditBookings,
@@ -267,4 +401,5 @@ module.exports = {
     updateBookingStatus,
     createRazorpayBookingOrder,
     verifyBookingPayment,
+    cancelBooking,
 };
