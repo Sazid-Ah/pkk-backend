@@ -77,6 +77,15 @@ const userSchema = new mongoose.Schema({
         country: { type: String, default: 'India' },
         isDefault: { type: Boolean, default: false }
     }],
+    isDeletionPending: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
+    deletionRequestedAt: {
+        type: Date,
+        default: null,
+    },
 }, {
     timestamps: true,
 });
