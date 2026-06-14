@@ -1,7 +1,9 @@
 const asyncHandler = require('express-async-handler');
 const Booking = require('../models/Booking');
+const RefundLog = require('../models/RefundLog');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const { sendBookingCancellationEmail } = require('../utils/emailService');
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -246,11 +248,76 @@ const getAllBookings = asyncHandler(async (req, res) => {
 // @desc    Update booking status
 // @route   PUT /api/bookings/:id/status
 // @access  Private/Admin
+const createRefundLog = async ({ bookingId, orderId, razorpayPaymentId, amount, status, failureReason, razorpayRefundId }) => {
+    try {
+        await RefundLog.create({
+            booking: bookingId || null,
+            order: orderId || null,
+            razorpayPaymentId,
+            razorpayRefundId,
+            amount,
+            status,
+            failureReason: failureReason || '',
+        });
+    } catch (error) {
+        console.error('Error creating refund log:', error);
+    }
+};
+
+const processBookingRefund = async (booking) => {
+    if (!booking.razorpayPaymentId || booking.paymentStatus !== 'Paid') {
+        return booking;
+    }
+
+    const refundAmountInPaise = Math.round((booking.price || 0) * 100);
+    try {
+        const refund = await razorpay.payments.refund(booking.razorpayPaymentId, {
+            amount: refundAmountInPaise,
+        });
+
+        booking.paymentStatus = 'Refunded';
+        await booking.save();
+
+        await createRefundLog({
+            bookingId: booking._id,
+            razorpayPaymentId: booking.razorpayPaymentId,
+            razorpayRefundId: refund.id,
+            amount: booking.price,
+            status: 'completed',
+        });
+
+        if (booking.user) {
+            await booking.populate('user', 'username email');
+            if (booking.user.email) {
+                await sendBookingCancellationEmail(booking.user.email, booking.user.username || booking.user.email, booking._id.toString(), booking.price || 0);
+            }
+        }
+
+        return booking;
+    } catch (error) {
+        console.error('Booking refund failed:', error);
+        await createRefundLog({
+            bookingId: booking._id,
+            razorpayPaymentId: booking.razorpayPaymentId,
+            amount: booking.price,
+            status: 'failed',
+            failureReason: error.message || 'Razorpay refund failed',
+        });
+        return booking;
+    }
+};
+
 const updateBookingStatus = asyncHandler(async (req, res) => {
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findById(req.params.id).populate('user', 'username email');
 
     if (booking) {
-        booking.status = req.body.status || booking.status;
+        const updatedStatus = req.body.status || booking.status;
+        booking.status = updatedStatus;
+
+        if (updatedStatus === 'Cancelled' && booking.paymentStatus === 'Paid') {
+            await processBookingRefund(booking);
+        }
+
         const updatedBooking = await booking.save();
         res.json(updatedBooking);
     } else {
@@ -384,8 +451,14 @@ const cancelBooking = asyncHandler(async (req, res) => {
     }
 
     booking.status = 'Cancelled';
-    booking.paymentStatus = 'Failed';
-    const updatedBooking = await booking.save();
+    if (booking.paymentStatus === 'Paid') {
+        await processBookingRefund(booking);
+    } else {
+        booking.paymentStatus = 'Failed';
+        await booking.save();
+    }
+
+    const updatedBooking = await Booking.findById(booking._id);
     res.json({ message: 'Booking cancelled', booking: updatedBooking });
 });
 

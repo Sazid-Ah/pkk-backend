@@ -1,3 +1,4 @@
+const asyncHandler = require('express-async-handler');
 const Review = require('../models/Review');
 const Pandit = require('../models/Pandit');
 const Product = require('../models/Product');
@@ -7,7 +8,7 @@ const Order = require('../models/Order');
 // @desc    Add a review
 // @route   POST /api/reviews
 // @access  Private
-exports.addReview = async (req, res) => {
+const addReview = asyncHandler(async (req, res) => {
     try {
         const { itemType, itemId, rating, comment, bookingId, orderId } = req.body;
         const userId = req.user.id;
@@ -111,12 +112,12 @@ exports.addReview = async (req, res) => {
         }
         res.status(500).json({ success: false, message: 'Server Error' });
     }
-};
+});
 
 // @desc    Get reviews for an item
 // @route   GET /api/reviews/:itemType/:itemId
 // @access  Public
-exports.getReviews = async (req, res) => {
+const getReviews = asyncHandler(async (req, res) => {
     try {
         const { itemType, itemId } = req.params;
         
@@ -129,4 +130,34 @@ exports.getReviews = async (req, res) => {
         console.error('Error fetching reviews:', error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
+});
+
+// @desc    Get reviews with optional filters (admin only)
+// @route   GET /api/reviews/admin
+// @access  Private/Admin
+const getAllReviews = asyncHandler(async (req, res) => {
+    try {
+        const { itemType, itemId, rating, userId } = req.query;
+        const filter = {};
+
+        if (itemType) filter.itemType = itemType;
+        if (itemId) filter.itemId = itemId;
+        if (rating) filter.rating = Number(rating);
+        if (userId) filter.user = userId;
+
+        const reviews = await Review.find(filter)
+            .populate('user', 'username email')
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({ success: true, count: reviews.length, data: reviews });
+    } catch (error) {
+        console.error('Error fetching reviews:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+});
+
+module.exports = {
+    addReview,
+    getReviews,
+    getAllReviews,
 };

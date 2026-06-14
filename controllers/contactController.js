@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Contact = require('../models/Contact');
 const { sendInquiryEmail } = require('../utils/emailService');
+const { validateEmail, validatePhone } = require('../utils/validation');
 
 // @desc    Submit a contact inquiry
 // @route   POST /api/contact
@@ -13,11 +14,18 @@ const submitInquiry = asyncHandler(async (req, res) => {
         throw new Error('Please provide name, email, subject and message');
     }
 
-    // Validate email format
-    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
-    if (!emailRegex.test(email.trim())) {
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
         res.status(400);
-        throw new Error('Please provide a valid email address');
+        throw new Error(emailValidation.error);
+    }
+
+    if (phone) {
+        const phoneValidation = validatePhone(String(phone));
+        if (!phoneValidation.valid) {
+            res.status(400);
+            throw new Error(phoneValidation.error);
+        }
     }
 
     try {

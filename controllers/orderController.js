@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const GlobalSettings = require('../models/GlobalSettings');
+const RefundLog = require('../models/RefundLog');
+const { sendOrderCancellationEmail } = require('../utils/emailService');
 
 
 // Initialize Razorpay
@@ -95,11 +97,74 @@ const getOrders = asyncHandler(async (req, res) => {
 // @desc    Update order status
 // @route   PUT /api/orders/:id/status
 // @access  Private/Admin/Employee
+const createRefundLog = async ({ bookingId, orderId, razorpayPaymentId, amount, status, failureReason, razorpayRefundId }) => {
+    try {
+        await RefundLog.create({
+            booking: bookingId || null,
+            order: orderId || null,
+            razorpayPaymentId,
+            razorpayRefundId,
+            amount,
+            status,
+            failureReason: failureReason || '',
+        });
+    } catch (error) {
+        console.error('Error creating refund log:', error);
+    }
+};
+
+const processOrderRefund = async (order) => {
+    if (!order.razorpayPaymentId || order.paymentStatus !== 'Paid') {
+        return order;
+    }
+
+    const refundAmountInPaise = Math.round((order.totalAmount || 0) * 100);
+    try {
+        const refund = await razorpay.payments.refund(order.razorpayPaymentId, {
+            amount: refundAmountInPaise,
+        });
+
+        order.paymentStatus = 'Refunded';
+        await order.save();
+
+        await createRefundLog({
+            orderId: order._id,
+            razorpayPaymentId: order.razorpayPaymentId,
+            razorpayRefundId: refund.id,
+            amount: order.totalAmount,
+            status: 'completed',
+        });
+
+        await order.populate('user', 'username email');
+        if (order.user?.email) {
+            await sendOrderCancellationEmail(order.user.email, order.user.username || order.user.email, order._id.toString(), order.totalAmount || 0);
+        }
+
+        return order;
+    } catch (error) {
+        console.error('Order refund failed:', error);
+        await createRefundLog({
+            orderId: order._id,
+            razorpayPaymentId: order.razorpayPaymentId,
+            amount: order.totalAmount,
+            status: 'failed',
+            failureReason: error.message || 'Razorpay refund failed',
+        });
+        return order;
+    }
+};
+
 const updateOrderToStatus = asyncHandler(async (req, res) => {
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate('user', 'username email');
 
     if (order) {
-        order.status = req.body.status || order.status;
+        const updatedStatus = req.body.status || order.status;
+        order.status = updatedStatus;
+
+        if (updatedStatus === 'Cancelled' && order.paymentStatus === 'Paid') {
+            await processOrderRefund(order);
+        }
+
         const updatedOrder = await order.save();
         res.json(updatedOrder);
     } else {
@@ -230,8 +295,14 @@ const cancelOrder = asyncHandler(async (req, res) => {
     }
 
     order.status = 'Cancelled';
-    order.paymentStatus = 'Failed';
-    const updatedOrder = await order.save();
+    if (order.paymentStatus === 'Paid') {
+        await processOrderRefund(order);
+    } else {
+        order.paymentStatus = 'Failed';
+        await order.save();
+    }
+
+    const updatedOrder = await Order.findById(order._id);
     res.json({ message: 'Order cancelled', order: updatedOrder });
 });
 

@@ -48,8 +48,12 @@ const bookingSchema = new mongoose.Schema({
     },
     paymentStatus: {
         type: String,
-        enum: ['Pending', 'Paid', 'Failed'],
+        enum: ['Pending', 'Paid', 'Failed', 'Refunded'],
         default: 'Pending',
+    },
+    isRated: {
+        type: Boolean,
+        default: false,
     },
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },

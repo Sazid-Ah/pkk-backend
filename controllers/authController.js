@@ -7,6 +7,7 @@ const DeletionRequest = require('../models/DeletionRequest');
 const Order = require('../models/Order');
 const RegistrationOTP = require('../models/RegistrationOTP');
 const { sendOTPEmail, sendPasswordResetConfirmation } = require('../utils/emailService');
+const { validateEmail, validatePassword, validateOTP } = require('../utils/validation');
 const { logActivity } = require('./activityLogController');
 
 // @desc    Register new user
@@ -24,11 +25,17 @@ const registerUser = asyncHandler(async (req, res) => {
     username = username.trim().toLowerCase();
     email = email.trim().toLowerCase();
 
-    // Validate email format
-    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
-    if (!emailRegex.test(email)) {
+    // Validate email and password format
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
         res.status(400);
-        throw new Error('Please add a valid email');
+        throw new Error(emailValidation.error);
+    }
+
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+        res.status(400);
+        throw new Error(passwordValidation.error);
     }
 
     // Check if user exists
@@ -465,9 +472,16 @@ const resetPassword = asyncHandler(async (req, res) => {
 
     email = email.trim().toLowerCase();
 
-    if (newPassword.length < 6) {
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
         res.status(400);
-        throw new Error('Password must be at least 6 characters');
+        throw new Error(emailValidation.error);
+    }
+
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+        res.status(400);
+        throw new Error(passwordValidation.error);
     }
 
     const user = await User.findOne({ email, resetToken });
@@ -758,6 +772,12 @@ const requestRegisterOTP = asyncHandler(async (req, res) => {
 
     email = email.trim().toLowerCase();
 
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+        res.status(400);
+        throw new Error(emailValidation.error);
+    }
+
     // Check if user already exists
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -803,6 +823,18 @@ const verifyRegisterOTP = asyncHandler(async (req, res) => {
     }
 
     email = email.trim().toLowerCase();
+
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+        res.status(400);
+        throw new Error(emailValidation.error);
+    }
+
+    const otpValidation = validateOTP(String(otp));
+    if (!otpValidation.valid) {
+        res.status(400);
+        throw new Error(otpValidation.error);
+    }
 
     const regOTP = await RegistrationOTP.findOne({ email });
 

@@ -136,7 +136,149 @@ const sendPasswordResetConfirmation = async (email, username) => {
     }
 };
 
+const sendBookingCancellationEmail = async (email, username, bookingId, amount) => {
+    try {
+        const transporter = createTransporter();
+        const mailOptions = {
+            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            to: email,
+            subject: 'Booking Cancellation Confirmation - PKK App',
+            html: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; color: #333; line-height: 1.5; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: #f97316; color: white; padding: 20px; border-radius: 10px 10px 0 0; text-align: center; }
+                        .content { background: #fafafa; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .amount { font-size: 28px; font-weight: bold; color: #111827; margin: 20px 0; }
+                        .footer { color: #6b7280; font-size: 13px; margin-top: 30px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header"><h1>Booking Cancelled</h1></div>
+                        <div class="content">
+                            <p>Hi <strong>${username}</strong>,</p>
+                            <p>Your booking <strong>#${bookingId}</strong> has been cancelled successfully.</p>
+                            <p class="amount">Refund Amount: ₹${amount.toFixed(2)}</p>
+                            <p>If you have any questions, please contact support.</p>
+                            <p>Thanks,<br>PKK Team</p>
+                        </div>
+                        <div class="footer">This is an automated message. Please do not reply directly.</div>
+                    </div>
+                </body>
+                </html>
+            `,
+        };
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Booking cancellation email sent:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('Error sending booking cancellation email:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+const sendOrderCancellationEmail = async (email, username, orderId, amount) => {
+    try {
+        const transporter = createTransporter();
+        const mailOptions = {
+            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            to: email,
+            subject: 'Order Cancellation Confirmation - PKK App',
+            html: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; color: #333; line-height: 1.5; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: #2563eb; color: white; padding: 20px; border-radius: 10px 10px 0 0; text-align: center; }
+                        .content { background: #fafafa; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .amount { font-size: 28px; font-weight: bold; color: #111827; margin: 20px 0; }
+                        .footer { color: #6b7280; font-size: 13px; margin-top: 30px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header"><h1>Order Cancelled</h1></div>
+                        <div class="content">
+                            <p>Hi <strong>${username}</strong>,</p>
+                            <p>Your order <strong>#${orderId}</strong> has been cancelled successfully.</p>
+                            <p class="amount">Refund Amount: ₹${amount.toFixed(2)}</p>
+                            <p>If you have any questions, please contact support.</p>
+                            <p>Thanks,<br>PKK Team</p>
+                        </div>
+                        <div class="footer">This is an automated message. Please do not reply directly.</div>
+                    </div>
+                </body>
+                </html>
+            `,
+        };
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Order cancellation email sent:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('Error sending order cancellation email:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+const sendInquiryEmail = async ({ name, email, phone, subject, message }) => {
+    try {
+        const transporter = createTransporter();
+        const to = process.env.CONTACT_NOTIFICATION_EMAILS || process.env.SMTP_USER;
+        const mailOptions = {
+            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            to,
+            subject: subject ? `New Contact Inquiry: ${subject}` : 'New Contact Inquiry - PKK App',
+            html: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: #1f2937; color: white; padding: 20px; border-radius: 10px 10px 0 0; text-align: center; }
+                        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .field { margin-bottom: 16px; }
+                        .label { font-weight: bold; color: #111827; }
+                        .value { margin-top: 4px; color: #4b5563; }
+                        .footer { color: #6b7280; font-size: 13px; margin-top: 30px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header"><h1>New Contact Inquiry</h1></div>
+                        <div class="content">
+                            <div class="field"><div class="label">Name</div><div class="value">${name}</div></div>
+                            <div class="field"><div class="label">Email</div><div class="value">${email}</div></div>
+                            ${phone ? `<div class="field"><div class="label">Phone</div><div class="value">${phone}</div></div>` : ''}
+                            <div class="field"><div class="label">Subject</div><div class="value">${subject}</div></div>
+                            <div class="field"><div class="label">Message</div><div class="value">${message}</div></div>
+                            <div class="footer">This inquiry was submitted through the PKK contact form.</div>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `,
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Inquiry notification email sent:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('Error sending inquiry email:', error);
+        return { success: false, error: error.message };
+    }
+};
+
 module.exports = {
     sendOTPEmail,
     sendPasswordResetConfirmation,
+    sendBookingCancellationEmail,
+    sendOrderCancellationEmail,
+    sendInquiryEmail,
 };
