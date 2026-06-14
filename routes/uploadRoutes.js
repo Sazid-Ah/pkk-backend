@@ -64,8 +64,9 @@ router.get('/image/:id', async (req, res) => {
             return res.status(404).json({ message: 'Image not found in database' });
         }
 
-        // Set the content type header
-        res.set('Content-Type', files[0].contentType);
+        // Set the content type header and force inline rendering
+        res.setHeader('Content-Type', files[0].contentType || 'application/octet-stream');
+        res.setHeader('Content-Disposition', 'inline');
 
         // Stream the file back to the client
         const downloadStream = gfsBucket.openDownloadStream(fileId);
@@ -73,7 +74,11 @@ router.get('/image/:id', async (req, res) => {
 
         downloadStream.on('error', (err) => {
             console.error('GridFS Download Default Error:', err);
-            res.status(404).json({ message: 'Error streaming image from database' });
+            if (!res.headersSent) {
+                res.status(404).json({ message: 'Error streaming image from database' });
+            } else {
+                res.end();
+            }
         });
 
     } catch (error) {
