@@ -1,15 +1,15 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db');
+const connectDB = require('../config/db');
 
 dotenv.config();
 connectDB();
 
 const verifyLogin = async () => {
     try {
-        const Employee = require('./models/Employee');
-        const User = require('./models/User');
+        const Employee = require('../models/Employee');
+        const User = require('../models/User');
 
         const username = process.env.ADMIN_USERNAME || 'admin';
         const password = process.env.ADMIN_PASSWORD || '123456';

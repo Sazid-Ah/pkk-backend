@@ -1,7 +1,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const Product = require('./models/Product');
-const Pandit = require('./models/Pandit');
+const Product = require('../models/Product');
+const Pandit = require('../models/Pandit');
 
 async function test() {
     try {

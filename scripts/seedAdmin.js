@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
-const User = require('./models/User');
-const connectDB = require('./config/db');
+const User = require('../models/User');
+const connectDB = require('../config/db');
 
 dotenv.config();
 
@@ -23,7 +23,7 @@ const seedAdmin = async () => {
         // Fix for "E11000 duplicate key error collection: pkk_db.employees index: user_1 dup key: { user: null }"
         // Drop the old index if it exists
         try {
-            const Employee = require('./models/Employee');
+            const Employee = require('../models/Employee');
             await Employee.collection.dropIndex('user_1');
             console.log('Dropped old user_1 index');
         } catch (e) {
@@ -31,7 +31,7 @@ const seedAdmin = async () => {
         }
 
         // Check if admin employee exists
-        const Employee = require('./models/Employee');
+        const Employee = require('../models/Employee');
         const adminExists = await Employee.findOne({ username });
 
         if (adminExists) {

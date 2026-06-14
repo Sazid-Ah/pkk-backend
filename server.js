@@ -23,7 +23,7 @@ console.log('Environment:', process.env.NODE_ENV || 'development');
 const app = express();
 app.set('trust proxy', 1);
 
-// Health check endpoint - responds immediately for Cloud Run
+// Health check endpoint - responds immediately for hosting platforms (e.g. Render, Cloud Run)
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
@@ -78,6 +78,7 @@ const routes = [
     { path: '/api/global-settings', file: './routes/globalSettingsRoutes' },
     { path: '/api/reviews', file: './routes/reviewRoutes' },
     { path: '/api/contact', file: './routes/contactRoutes' },
+    { path: '/api/setup', file: './routes/setupRoutes' },
 ];
 
 for (const route of routes) {
@@ -120,7 +121,15 @@ server.setTimeout(120000);
 // Connect to database asynchronously (non-blocking)
 console.log('🔄 Connecting to MongoDB...');
 connectDB()
-    .then(() => console.log('✅ Database connection established'))
+    .then(() => {
+        console.log('✅ Database connection established');
+        try {
+            const { ensureAdminExists } = require('./config/adminSeed');
+            ensureAdminExists();
+        } catch (adminErr) {
+            console.error('❌ Failed to run ensureAdminExists:', adminErr.message);
+        }
+    })
     .catch(error => {
         console.error('⚠️  Database connection failed:', error.message);
         console.error('Server will continue running without database');

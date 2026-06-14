@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 // Load models
-const Employee = require('./models/Employee');
+const Employee = require('../models/Employee');
 
 const MONGO_URI = process.env.MONGO_URI;
 const adminUsername = process.env.ADMIN_USERNAME || 'admin';

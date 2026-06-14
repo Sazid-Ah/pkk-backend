@@ -12,3 +12,7 @@ build
 
 # Logs
 logs
+
+# Local uploads
+uploads/
+

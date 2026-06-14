@@ -1,9 +1,9 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const Product = require('./models/Product');
-const Pandit = require('./models/Pandit');
-const Category = require('./models/Category');
-const Occasion = require('./models/Occasion');
+const Product = require('../models/Product');
+const Pandit = require('../models/Pandit');
+const Category = require('../models/Category');
+const Occasion = require('../models/Occasion');
 
 async function migrate() {
     try {
