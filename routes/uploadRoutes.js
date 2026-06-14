@@ -53,63 +53,12 @@ router.post('/', protect, upload.single('image'), (req, res) => {
     });
 });
 
-// @desc    Retrieve an image from MongoDB GridFS
-// @route   GET /api/upload/image/:id
+// @desc    Retrieve an image from MongoDB GridFS (with extension suffix, e.g. /image/:id.png)
+// @route   GET /api/upload/image/:id.:ext
 // @access  Public
-// Support both /image/:id and /image/:id.:ext (some previewers append extensions)
-router.get('/image/:id', async (req, res) => {
-    try {
-        if (!gfsBucket) {
-            return res.status(500).send('Database connection not ready for retrieval');
-        }
-        const fileId = new ObjectId(req.params.id);
-
-        // Find the file to get its content type
-        const files = await gfsBucket.find({ _id: fileId }).toArray();
-        if (!files || files.length === 0) {
-            return res.status(404).json({ message: 'Image not found in database' });
-        }
-
-        // Determine content type from known places (files document or metadata) and fall back to extension
-        const fileDoc = files[0];
-        const ext = path.extname(fileDoc.filename || fileDoc.metadata?.originalName || '')?.toLowerCase();
-        const extToMime = {
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp',
-            '.svg': 'image/svg+xml',
-        };
-        const contentType = fileDoc.contentType || fileDoc.metadata?.contentType || extToMime[ext] || 'application/octet-stream';
-
-        // Set the content type header and force inline rendering with a sensible filename
-        res.setHeader('Content-Type', contentType);
-        const filenameForHeader = fileDoc.metadata?.originalName || fileDoc.filename || `${fileId}${ext}`;
-        res.setHeader('Content-Disposition', `inline; filename="${filenameForHeader}"`);
-
-        // Stream the file back to the client
-        const downloadStream = gfsBucket.openDownloadStream(fileId);
-        downloadStream.pipe(res);
-
-        downloadStream.on('error', (err) => {
-            console.error('GridFS Download Default Error:', err);
-            if (!res.headersSent) {
-                res.status(404).json({ message: 'Error streaming image from database' });
-            } else {
-                res.end();
-            }
-        });
-
-    } catch (error) {
-        console.error('GridFS ID parsing Error:', error);
-        res.status(400).json({ message: 'Invalid image ID format' });
-    }
-});
-
-// Route that accepts an extension suffix (e.g. /image/:id.png) — delegates to the same logic above
+// IMPORTANT: this route must be defined BEFORE /image/:id so Express matches it first,
+// because Express would otherwise capture the dot+extension as part of the :id param.
 router.get('/image/:id.:ext', async (req, res) => {
-    // Reuse the same logic by calling the handler path above; Express will match this new route separately.
     try {
         if (!gfsBucket) {
             return res.status(500).send('Database connection not ready for retrieval');
@@ -150,6 +99,55 @@ router.get('/image/:id.:ext', async (req, res) => {
         });
     } catch (error) {
         console.error('GridFS ID parsing Error (dot-ext):', error);
+        res.status(400).json({ message: 'Invalid image ID format' });
+    }
+});
+
+// @desc    Retrieve an image from MongoDB GridFS (plain ObjectId, no extension)
+// @route   GET /api/upload/image/:id
+// @access  Public
+router.get('/image/:id', async (req, res) => {
+    try {
+        if (!gfsBucket) {
+            return res.status(500).send('Database connection not ready for retrieval');
+        }
+        const fileId = new ObjectId(req.params.id);
+
+        const files = await gfsBucket.find({ _id: fileId }).toArray();
+        if (!files || files.length === 0) {
+            return res.status(404).json({ message: 'Image not found in database' });
+        }
+
+        const fileDoc = files[0];
+        const ext = path.extname(fileDoc.filename || fileDoc.metadata?.originalName || '')?.toLowerCase();
+        const extToMime = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.svg': 'image/svg+xml',
+        };
+        const contentType = fileDoc.contentType || fileDoc.metadata?.contentType || extToMime[ext] || 'application/octet-stream';
+
+        res.setHeader('Content-Type', contentType);
+        const filenameForHeader = fileDoc.metadata?.originalName || fileDoc.filename || `${fileId}${ext}`;
+        res.setHeader('Content-Disposition', `inline; filename="${filenameForHeader}"`);
+
+        const downloadStream = gfsBucket.openDownloadStream(fileId);
+        downloadStream.pipe(res);
+
+        downloadStream.on('error', (err) => {
+            console.error('GridFS Download Default Error:', err);
+            if (!res.headersSent) {
+                res.status(404).json({ message: 'Error streaming image from database' });
+            } else {
+                res.end();
+            }
+        });
+
+    } catch (error) {
+        console.error('GridFS ID parsing Error:', error);
         res.status(400).json({ message: 'Invalid image ID format' });
     }
 });
