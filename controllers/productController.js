@@ -9,21 +9,18 @@ const getProducts = asyncHandler(async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
 
-    const { occasionId, categoryId } = req.query;
+    const { occasionId, categoryId, search } = req.query;
     let query = {};
-    if (occasionId) {
-        query.occasions = occasionId;
-    }
-    if (categoryId) {
-        query.category = categoryId;
-    }
+    if (occasionId) query.occasions = occasionId;
+    if (categoryId) query.category = categoryId;
+    if (search) query.name = { $regex: search, $options: 'i' };
 
-    const products = await Product.find(query)
-        .populate('occasions')
-        .skip(skip)
-        .limit(limit);
+    const [products, total] = await Promise.all([
+        Product.find(query).populate('occasions').skip(skip).limit(limit),
+        Product.countDocuments(query),
+    ]);
 
-    res.json(products);
+    res.json({ products, total, page, pages: Math.ceil(total / limit) });
 });
 
 // @desc    Get single product by ID

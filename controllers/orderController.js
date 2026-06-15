@@ -4,6 +4,7 @@ const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const GlobalSettings = require('../models/GlobalSettings');
 const RefundLog = require('../models/RefundLog');
+const Notification = require('../models/Notification');
 const { sendOrderCancellationEmail } = require('../utils/emailService');
 
 
@@ -190,6 +191,16 @@ const updateOrderToStatus = asyncHandler(async (req, res) => {
         }
 
         const updatedOrder = await order.save();
+
+        const shortId = String(order._id).slice(-6).toUpperCase();
+        Notification.create({
+            user: order.user._id || order.user,
+            type: 'order',
+            title: 'Order update',
+            message: `Your order #${shortId} is now ${updatedStatus.toLowerCase()}.`,
+            link: '/orders',
+        }).catch(() => {});
+
         res.json(updatedOrder);
     } else {
         res.status(404);

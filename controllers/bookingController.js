@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Booking = require('../models/Booking');
 const RefundLog = require('../models/RefundLog');
+const Notification = require('../models/Notification');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { sendBookingCancellationEmail } = require('../utils/emailService');
@@ -337,6 +338,15 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
         }
 
         const updatedBooking = await booking.save();
+
+        Notification.create({
+            user: booking.user._id || booking.user,
+            type: 'booking',
+            title: 'Booking update',
+            message: `Your booking is now ${updatedStatus.toLowerCase()}.`,
+            link: '/bookings',
+        }).catch(() => {});
+
         res.json(updatedBooking);
     } else {
         res.status(404);

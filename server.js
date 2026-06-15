@@ -99,6 +99,7 @@ const routes = [
     { path: '/api/global-settings', file: './routes/globalSettingsRoutes' },
     { path: '/api/reviews', file: './routes/reviewRoutes' },
     { path: '/api/contact', file: './routes/contactRoutes' },
+    { path: '/api/notifications', file: './routes/notificationRoutes' },
     { path: '/api/setup', file: './routes/setupRoutes' },
 ];
 
@@ -123,8 +124,8 @@ app.get('/', (req, res) => {
 
 app.use((err, req, res, next) => {
     const statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
-    res.status(statusCode);
-    res.json({
+    res.status(statusCode).json({
+        success: false,
         message: err.message,
         stack: process.env.NODE_ENV === 'production' ? null : err.stack,
     });

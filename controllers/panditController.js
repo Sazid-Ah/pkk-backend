@@ -11,6 +11,16 @@ try {
 
 const Booking = require('../models/Booking');
 
+// Parse a price string like "₹2000-5000" or "2000" into { priceMin, priceMax }
+function parsePriceRange(priceStr) {
+    if (!priceStr) return { priceMin: null, priceMax: null };
+    const digits = String(priceStr).replace(/[^\d\-]/g, '');
+    const parts = digits.split('-').map(Number).filter((n) => !isNaN(n) && n > 0);
+    if (parts.length >= 2) return { priceMin: parts[0], priceMax: parts[1] };
+    if (parts.length === 1) return { priceMin: parts[0], priceMax: parts[0] };
+    return { priceMin: null, priceMax: null };
+}
+
 // @desc    Get all pandits
 // @route   GET /api/pandits
 // @access  Public
@@ -96,6 +106,7 @@ const createPandit = asyncHandler(async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    const priceStr = String(price).trim();
     const panditData = {
         name: String(name).trim(),
         username: String(username).trim(),
@@ -104,7 +115,8 @@ const createPandit = asyncHandler(async (req, res) => {
         languages: Array.isArray(languages) ? languages : (languages ? String(languages).split(',').map(l => l.trim()).filter(l => l) : []),
         about: about ? String(about) : '',
         rating: rating ? Number(rating) : 0,
-        price: String(price).trim(),
+        price: priceStr,
+        ...parsePriceRange(priceStr),
         image: image ? String(image) : '',
         occasions: occasions || [],
         address: address ? String(address) : '',
@@ -158,7 +170,10 @@ const updatePandit = asyncHandler(async (req, res) => {
     // Admin can manually set rating and numReviews
     if (req.body.rating !== undefined) pandit.rating = Number(req.body.rating);
     if (req.body.numReviews !== undefined) pandit.numReviews = Number(req.body.numReviews);
-    if (req.body.price) pandit.price = String(req.body.price).trim();
+    if (req.body.price) {
+        pandit.price = String(req.body.price).trim();
+        Object.assign(pandit, parsePriceRange(pandit.price));
+    }
     if (req.body.image !== undefined) pandit.image = req.body.image ? String(req.body.image) : '';
     if (req.body.occasions) pandit.occasions = req.body.occasions;
     if (req.body.address !== undefined) pandit.address = req.body.address;
@@ -246,8 +261,23 @@ const getPanditStats = asyncHandler(async (req, res) => {
     res.json({ pujasCompleted });
 });
 
+// @desc    Get a single pandit by ID (public profile)
+// @route   GET /api/pandits/:id
+// @access  Public
+const getPanditById = asyncHandler(async (req, res) => {
+    const pandit = await Pandit.findById(req.params.id)
+        .select('-password -refreshToken -loginHistory')
+        .populate('occasions', 'name image');
+    if (!pandit) {
+        res.status(404);
+        throw new Error('Pandit not found');
+    }
+    res.json(pandit);
+});
+
 module.exports = {
     getPandits,
+    getPanditById,
     createPandit,
     updatePandit,
     deletePandit,

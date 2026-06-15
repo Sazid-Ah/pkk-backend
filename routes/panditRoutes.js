@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
     getPandits,
+    getPanditById,
     createPandit,
     updatePandit,
     deletePandit,
@@ -16,6 +17,7 @@ router.route('/').get(getPandits).post(protect, admin, createPandit);
 router.route('/me').get(protect, pandit, getPanditProfile).put(protect, pandit, updatePanditProfile);
 router.route('/:id/stats').get(getPanditStats);
 router.route('/:id')
+    .get(getPanditById)
     .put(protect, admin, updatePandit)
     .delete(protect, admin, deletePandit);
 

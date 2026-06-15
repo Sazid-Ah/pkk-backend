@@ -69,6 +69,14 @@ const panditSchema = new mongoose.Schema({
         type: String, // Can be range like "₹2000-5000" or fixed amount
         required: [true, 'Please add price info'],
     },
+    priceMin: {
+        type: Number,
+        default: null,
+    },
+    priceMax: {
+        type: Number,
+        default: null,
+    },
     image: {
         type: String,
         default: '', // URL to image
