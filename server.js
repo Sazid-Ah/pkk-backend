@@ -65,12 +65,19 @@ app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
-// Prevent NoSQL injection and strip HTML from all inputs
+// Prevent NoSQL injection — sanitize body and params only.
+// req.query is a read-only getter in Node 18+ / Express 4.18+; calling
+// express-mongo-sanitize() as a middleware would throw
+// "Cannot set property query of #<IncomingMessage> which has only a getter".
 try {
-    app.use(require('express-mongo-sanitize')());
-    app.use(require('xss-clean')());
+    const mongoSanitize = require('express-mongo-sanitize');
+    app.use((req, _res, next) => {
+        if (req.body) req.body = mongoSanitize.sanitize(req.body);
+        if (req.params) req.params = mongoSanitize.sanitize(req.params);
+        next();
+    });
 } catch (e) {
-    console.warn('⚠️  express-mongo-sanitize or xss-clean not installed:', e.message);
+    console.warn('⚠️  express-mongo-sanitize not installed:', e.message);
 }
 
 app.use(requestLogger);
