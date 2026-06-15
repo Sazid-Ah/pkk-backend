@@ -15,9 +15,10 @@ const {
     cancelBooking,
 } = require('../controllers/bookingController');
 const { protect, admin, pandit } = require('../middleware/authMiddleware');
+const { bookingLimiter } = require('../middleware/rateLimiter');
 
 router.route('/')
-    .post(protect, createBooking)
+    .post(protect, bookingLimiter, createBooking)
     .get(protect, admin, getAllBookings);
 
 router.route('/mybookings').get(protect, getMyBookings);

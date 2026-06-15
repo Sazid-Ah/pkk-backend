@@ -66,26 +66,26 @@ const addReview = asyncHandler(async (req, res) => {
             orderId: orderId || null
         });
 
-        // 3. Update the appropriate Model's average rating 
+        // 3. Update the appropriate Model's average rating atomically to prevent race conditions
         let updatedAverage = 0;
+        const ratingValue = Number(rating);
+        const ratingPipeline = [{
+            $set: {
+                numReviews: { $add: [{ $ifNull: ['$numReviews', 0] }, 1] },
+                rating: {
+                    $divide: [
+                        { $add: [{ $multiply: [{ $ifNull: ['$rating', 0] }, { $ifNull: ['$numReviews', 0] }] }, ratingValue] },
+                        { $add: [{ $ifNull: ['$numReviews', 0] }, 1] }
+                    ]
+                }
+            }
+        }];
         if (itemType === 'Pandit') {
-            const pandit = await Pandit.findById(itemId);
-            if (pandit) {
-                const totalRating = (pandit.rating || 0) * (pandit.numReviews || 0);
-                pandit.numReviews = (pandit.numReviews || 0) + 1;
-                pandit.rating = (totalRating + rating) / pandit.numReviews;
-                updatedAverage = pandit.rating;
-                await pandit.save();
-            }
+            const updated = await Pandit.findByIdAndUpdate(itemId, ratingPipeline, { new: true });
+            if (updated) updatedAverage = updated.rating;
         } else if (itemType === 'Product') {
-            const product = await Product.findById(itemId);
-            if (product) {
-                const totalRating = (product.rating || 0) * (product.numReviews || 0);
-                product.numReviews = (product.numReviews || 0) + 1;
-                product.rating = (totalRating + rating) / product.numReviews;
-                updatedAverage = product.rating;
-                await product.save();
-            }
+            const updated = await Product.findByIdAndUpdate(itemId, ratingPipeline, { new: true });
+            if (updated) updatedAverage = updated.rating;
         }
 
         // 4. Mark the Order/Booking as rated

@@ -5,6 +5,7 @@ const { GridFSBucket, ObjectId } = require('mongodb');
 const path = require('path');
 const upload = require('../middleware/uploadMiddleware');
 const { protect } = require('../middleware/authMiddleware');
+const { uploadLimiter } = require('../middleware/rateLimiter');
 
 // Get GridFS bucket instance
 let gfsBucket;
@@ -17,7 +18,7 @@ mongoose.connection.once('open', () => {
 // @desc    Upload an image to MongoDB GridFS
 // @route   POST /api/upload
 // @access  Private
-router.post('/', protect, upload.single('image'), (req, res) => {
+router.post('/', protect, uploadLimiter, upload.single('image'), (req, res) => {
     if (!req.file) {
         return res.status(400).send({ message: 'No image uploaded' });
     }

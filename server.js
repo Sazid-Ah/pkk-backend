@@ -55,14 +55,24 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
-app.use(cors({
-    origin: process.env.ALLOWED_ORIGINS
-        ? process.env.ALLOWED_ORIGINS.split(',')
-        : (process.env.NODE_ENV === 'production' ? false : true),
-    credentials: true,
-}));
+const corsOrigin = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : (process.env.NODE_ENV === 'production' ? false : true);
+if (!process.env.ALLOWED_ORIGINS) {
+    console.warn('⚠️  CORS wildcard active — set ALLOWED_ORIGINS in production');
+}
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
+// Prevent NoSQL injection and strip HTML from all inputs
+try {
+    app.use(require('express-mongo-sanitize')());
+    app.use(require('xss-clean')());
+} catch (e) {
+    console.warn('⚠️  express-mongo-sanitize or xss-clean not installed:', e.message);
+}
+
 app.use(requestLogger);
 
 // Load routes with error handling

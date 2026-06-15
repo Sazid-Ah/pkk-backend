@@ -31,6 +31,12 @@ const protect = asyncHandler(async (req, res, next) => {
                 throw new Error('Not authorized, user not found');
             }
 
+            // Reject if refreshToken was cleared (i.e. user logged out)
+            if (user.refreshToken === null || user.refreshToken === undefined) {
+                res.status(401);
+                throw new Error('Session expired, please log in again');
+            }
+
             req.user = user;
             next();
         } catch (error) {

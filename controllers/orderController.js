@@ -7,11 +7,18 @@ const RefundLog = require('../models/RefundLog');
 const { sendOrderCancellationEmail } = require('../utils/emailService');
 
 
-// Initialize Razorpay
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
     key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
+
+const withRazorpayTimeout = (promise, ms = 10000) =>
+    Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Razorpay request timed out')), ms)
+        ),
+    ]);
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -120,9 +127,9 @@ const processOrderRefund = async (order) => {
 
     const refundAmountInPaise = Math.round((order.totalAmount || 0) * 100);
     try {
-        const refund = await razorpay.payments.refund(order.razorpayPaymentId, {
-            amount: refundAmountInPaise,
-        });
+        const refund = await withRazorpayTimeout(
+            razorpay.payments.refund(order.razorpayPaymentId, { amount: refundAmountInPaise })
+        );
 
         order.paymentStatus = 'Refunded';
         await order.save();
@@ -154,11 +161,28 @@ const processOrderRefund = async (order) => {
     }
 };
 
+const ORDER_TRANSITIONS = {
+    Pending: ['Processing', 'Cancelled'],
+    Processing: ['Shipped', 'Cancelled'],
+    Shipped: ['Delivered'],
+    Delivered: [],
+    Cancelled: [],
+};
+
 const updateOrderToStatus = asyncHandler(async (req, res) => {
     const order = await Order.findById(req.params.id).populate('user', 'username email');
 
     if (order) {
         const updatedStatus = req.body.status || order.status;
+
+        if (updatedStatus !== order.status) {
+            const allowed = ORDER_TRANSITIONS[order.status] || [];
+            if (!allowed.includes(updatedStatus)) {
+                res.status(400);
+                throw new Error(`Cannot transition order from '${order.status}' to '${updatedStatus}'`);
+            }
+        }
+
         order.status = updatedStatus;
 
         if (updatedStatus === 'Cancelled' && order.paymentStatus === 'Paid') {
@@ -197,7 +221,7 @@ const createRazorpayOrder = asyncHandler(async (req, res) => {
             receipt: `receipt_${order._id}`,
         };
 
-        const rzpOrder = await razorpay.orders.create(options);
+        const rzpOrder = await withRazorpayTimeout(razorpay.orders.create(options));
 
         if (!rzpOrder || !rzpOrder.id) {
             console.error('Razorpay returned invalid order:', rzpOrder);

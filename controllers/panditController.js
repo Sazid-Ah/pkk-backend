@@ -9,10 +9,7 @@ try {
     throw error;
 }
 
-let Booking;
-try {
-    Booking = require('../models/Booking');
-} catch (e) {}
+const Booking = require('../models/Booking');
 
 // @desc    Get all pandits
 // @route   GET /api/pandits
@@ -176,9 +173,7 @@ const updatePandit = asyncHandler(async (req, res) => {
         };
     }
 
-    console.log('Saving updated pandit...');
     const updatedPandit = await pandit.save();
-    console.log('✅ Pandit updated:', updatedPandit._id);
     res.json(await updatedPandit.populate('occasions'));
 });
 
@@ -189,6 +184,11 @@ const deletePandit = asyncHandler(async (req, res) => {
     const pandit = await Pandit.findById(req.params.id);
 
     if (pandit) {
+        // Cancel any pending/confirmed bookings before removing the pandit
+        await Booking.updateMany(
+            { pandit: pandit._id, status: { $in: ['Pending', 'Confirmed'] } },
+            { status: 'Cancelled', notes: 'Pandit account removed' }
+        );
         await pandit.deleteOne();
         res.json({ message: 'Pandit removed' });
     } else {
@@ -242,10 +242,7 @@ const updatePanditProfile = asyncHandler(async (req, res) => {
 // @route   GET /api/pandits/:id/stats
 // @access  Public
 const getPanditStats = asyncHandler(async (req, res) => {
-    let pujasCompleted = 0;
-    if (Booking) {
-        pujasCompleted = await Booking.countDocuments({ pandit: req.params.id, status: 'Completed' });
-    }
+    const pujasCompleted = await Booking.countDocuments({ pandit: req.params.id, status: 'Completed' });
     res.json({ pujasCompleted });
 });
 

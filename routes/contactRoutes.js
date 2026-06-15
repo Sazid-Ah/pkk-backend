@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { submitInquiry } = require('../controllers/contactController');
-const { globalLimiter } = require('../middleware/rateLimiter');
+const { contactLimiter } = require('../middleware/rateLimiter');
 
-// Contact route is public but fits under a slightly stricter limit if needed
-router.post('/', globalLimiter, submitInquiry);
+router.post('/', contactLimiter, submitInquiry);
 
 module.exports = router;

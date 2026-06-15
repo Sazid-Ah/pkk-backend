@@ -47,7 +47,8 @@ const employeeSchema = mongoose.Schema({
     },
     salary: {
         type: Number,
-        default: 0
+        default: 0,
+        min: [0, 'Salary cannot be negative'],
     },
     isActive: {
         type: Boolean,

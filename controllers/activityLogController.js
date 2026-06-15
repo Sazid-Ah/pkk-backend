@@ -6,8 +6,12 @@ const crypto = require('crypto');
 // @route   Internal function
 // @access  Private
 const logActivity = asyncHandler(async (userId, userType, username, email, role, activityType, ipAddress, userAgent, device, sessionId = null, details = null) => {
+    const mongoose = require('mongoose');
+    const safeUserId = mongoose.Types.ObjectId.isValid(userId)
+        ? new mongoose.Types.ObjectId(userId)
+        : userId;
     const activity = await ActivityLog.create({
-        userId,
+        userId: safeUserId,
         userType,
         username,
         email,

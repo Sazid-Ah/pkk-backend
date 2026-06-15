@@ -10,6 +10,14 @@ const razorpay = new Razorpay({
     key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
+const withRazorpayTimeout = (promise, ms = 10000) =>
+    Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Razorpay request timed out')), ms)
+        ),
+    ]);
+
 
 // @desc    Get booked time slots for a pandit on a specific date
 // @route   GET /api/bookings/availability/:panditId?date=YYYY-MM-DD
@@ -73,16 +81,26 @@ const createBooking = asyncHandler(async (req, res) => {
         throw new Error('This time slot is already booked. Please choose a different slot.');
     }
 
-    const booking = await Booking.create({
-        user: req.user._id,
-        pandit,
-        bookingDate,
-        timeSlot: String(timeSlot),
-        occasion,
-        price,
-        notes,
-        address,
-    });
+    let booking;
+    try {
+        booking = await Booking.create({
+            user: req.user._id,
+            pandit,
+            bookingDate,
+            timeSlot: String(timeSlot),
+            occasion,
+            occasionRef: req.body.occasionRef || null,
+            price,
+            notes,
+            address,
+        });
+    } catch (err) {
+        if (err.code === 11000) {
+            res.status(409);
+            throw new Error('This time slot was just booked by someone else. Please choose a different slot.');
+        }
+        throw err;
+    }
 
     res.status(201).json(booking);
 });
@@ -271,9 +289,9 @@ const processBookingRefund = async (booking) => {
 
     const refundAmountInPaise = Math.round((booking.price || 0) * 100);
     try {
-        const refund = await razorpay.payments.refund(booking.razorpayPaymentId, {
-            amount: refundAmountInPaise,
-        });
+        const refund = await withRazorpayTimeout(
+            razorpay.payments.refund(booking.razorpayPaymentId, { amount: refundAmountInPaise })
+        );
 
         booking.paymentStatus = 'Refunded';
         await booking.save();
@@ -349,7 +367,7 @@ const createRazorpayBookingOrder = asyncHandler(async (req, res) => {
     };
 
     try {
-        const rzpOrder = await razorpay.orders.create(options);
+        const rzpOrder = await withRazorpayTimeout(razorpay.orders.create(options));
 
         if (!rzpOrder || !rzpOrder.id) {
             console.error('Razorpay returned invalid order:', rzpOrder);

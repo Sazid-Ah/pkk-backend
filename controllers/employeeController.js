@@ -24,6 +24,11 @@ const createEmployee = asyncHandler(async (req, res) => {
         throw new Error('Please add all required fields');
     }
 
+    if (salary !== undefined && Number(salary) < 0) {
+        res.status(400);
+        throw new Error('Salary cannot be negative');
+    }
+
     // Check if employee exists (username)
     const employeeExists = await Employee.findOne({ username });
     if (employeeExists) {

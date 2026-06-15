@@ -58,11 +58,25 @@ const bookingSchema = new mongoose.Schema({
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },
     razorpaySignature: { type: String },
+    occasionRef: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Occasion',
+        default: null,
+    },
 }, {
     timestamps: true,
 });
 
 bookingSchema.index({ user: 1, createdAt: -1 });
 bookingSchema.index({ pandit: 1, bookingDate: -1 });
+// Prevent double-booking: only one active booking per pandit/date/slot
+bookingSchema.index(
+    { pandit: 1, bookingDate: 1, timeSlot: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { status: { $in: ['Pending', 'Confirmed'] } },
+        name: 'unique_active_slot',
+    }
+);
 
 module.exports = mongoose.model('Booking', bookingSchema);

@@ -51,7 +51,7 @@ const runAutoConfirmBookings = async () => {
         const bookings = await Booking.find({
             status: 'Pending',
             paymentStatus: 'Paid',
-            updatedAt: { $lte: cutoff },
+            createdAt: { $lte: cutoff },
         });
 
         for (const booking of bookings) {
@@ -84,7 +84,7 @@ const runAutoConfirmOrders = async () => {
         const orders = await Order.find({
             status: 'Pending',
             paymentStatus: 'Paid',
-            updatedAt: { $lte: cutoff },
+            createdAt: { $lte: cutoff },
         });
 
         for (const order of orders) {
