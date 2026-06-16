@@ -15,6 +15,13 @@ const productSchema = new mongoose.Schema({
         type: Number,
         required: [true, 'Please add a price'],
     },
+    // Compare-at / original price for display. Set only when the item is on sale
+    // (mrp > price). `price` always remains the amount actually charged.
+    mrp: {
+        type: Number,
+        min: [0, 'MRP cannot be negative'],
+        default: null,
+    },
     image: {
         type: String,
         default: '', // URL to image

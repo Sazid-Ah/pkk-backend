@@ -11,6 +11,14 @@ try {
 
 const Booking = require('../models/Booking');
 
+// Keep `mrp` only when it's a genuine markdown above the displayed (minimum) price.
+function normalizeMrp(mrp, basePrice) {
+    if (mrp === undefined || mrp === null || mrp === '') return null;
+    const m = Number(mrp);
+    if (isNaN(m) || !basePrice || m <= Number(basePrice)) return null;
+    return m;
+}
+
 // Parse a price string like "₹2000-5000" or "2000" into { priceMin, priceMax }
 function parsePriceRange(priceStr) {
     if (!priceStr) return { priceMin: null, priceMax: null };
@@ -67,7 +75,7 @@ const getPandits = asyncHandler(async (req, res) => {
 // @route   POST /api/pandits
 // @access  Private/Admin
 const createPandit = asyncHandler(async (req, res) => {
-    const { name, username, password, specialty, languages, about, rating, price, image, occasions, address, latitude, longitude, experience, isVerified } = req.body;
+    const { name, username, password, specialty, languages, about, rating, price, image, occasions, address, latitude, longitude, experience, isVerified, mrp } = req.body;
 
     // Validate required fields
     if (!name || !name.toString().trim()) {
@@ -107,6 +115,7 @@ const createPandit = asyncHandler(async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const priceStr = String(price).trim();
+    const priceRange = parsePriceRange(priceStr);
     const panditData = {
         name: String(name).trim(),
         username: String(username).trim(),
@@ -116,7 +125,8 @@ const createPandit = asyncHandler(async (req, res) => {
         about: about ? String(about) : '',
         rating: rating ? Number(rating) : 0,
         price: priceStr,
-        ...parsePriceRange(priceStr),
+        ...priceRange,
+        mrp: normalizeMrp(mrp, priceRange.priceMin),
         image: image ? String(image) : '',
         occasions: occasions || [],
         address: address ? String(address) : '',
@@ -173,6 +183,12 @@ const updatePandit = asyncHandler(async (req, res) => {
     if (req.body.price) {
         pandit.price = String(req.body.price).trim();
         Object.assign(pandit, parsePriceRange(pandit.price));
+    }
+    // Recompute compare-at price against the (possibly updated) minimum price.
+    if (req.body.mrp !== undefined) {
+        pandit.mrp = normalizeMrp(req.body.mrp, pandit.priceMin);
+    } else if (pandit.mrp != null && (!pandit.priceMin || pandit.mrp <= pandit.priceMin)) {
+        pandit.mrp = null;
     }
     if (req.body.image !== undefined) pandit.image = req.body.image ? String(req.body.image) : '';
     if (req.body.occasions) pandit.occasions = req.body.occasions;

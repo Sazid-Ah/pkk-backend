@@ -97,6 +97,7 @@ const routes = [
     { path: '/api/analytics', file: './routes/analyticsRoutes' },
     { path: '/api/settings', file: './routes/settingsRoutes' },
     { path: '/api/global-settings', file: './routes/globalSettingsRoutes' },
+    { path: '/api/promotions', file: './routes/promotionRoutes' },
     { path: '/api/reviews', file: './routes/reviewRoutes' },
     { path: '/api/contact', file: './routes/contactRoutes' },
     { path: '/api/notifications', file: './routes/notificationRoutes' },

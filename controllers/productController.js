@@ -1,6 +1,15 @@
 const asyncHandler = require('express-async-handler');
 const Product = require('../models/Product');
 
+// Keep `mrp` only when it's a genuine markdown above the charged price.
+// Returns null otherwise so the item simply shows a single clean price.
+function normalizeMrp(mrp, price) {
+    if (mrp === undefined || mrp === null || mrp === '') return null;
+    const m = Number(mrp);
+    if (isNaN(m) || m <= Number(price)) return null;
+    return m;
+}
+
 // @desc    Get all products
 // @route   GET /api/products
 // @access  Public
@@ -39,7 +48,7 @@ const getProductById = asyncHandler(async (req, res) => {
 // @route   POST /api/products
 // @access  Private/Admin
 const createProduct = asyncHandler(async (req, res) => {
-    const { name, category, price, image, description, weight, type, includedItems, gstPercentage } = req.body;
+    const { name, category, price, image, description, weight, type, includedItems, gstPercentage, mrp } = req.body;
 
     let finalPrice = price;
     if (type === 'package' && includedItems && includedItems.length > 0) {
@@ -50,6 +59,7 @@ const createProduct = asyncHandler(async (req, res) => {
         name,
         category,
         price: finalPrice,
+        mrp: normalizeMrp(mrp, finalPrice),
         image,
         description,
         weight,
@@ -94,6 +104,14 @@ const updateProduct = asyncHandler(async (req, res) => {
 
         if (req.body.occasions) {
             product.occasions = req.body.occasions;
+        }
+
+        // Recompute compare-at price against the (possibly updated) charged price.
+        if (req.body.mrp !== undefined) {
+            product.mrp = normalizeMrp(req.body.mrp, product.price);
+        } else if (product.mrp != null && product.mrp <= product.price) {
+            // Price was raised at/above an old mrp — the discount no longer holds.
+            product.mrp = null;
         }
 
         const updatedProduct = await (await product.save()).populate('occasions');

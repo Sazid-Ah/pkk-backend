@@ -77,6 +77,12 @@ const panditSchema = new mongoose.Schema({
         type: Number,
         default: null,
     },
+    // Compare-at / original price for display. Set only when on sale (mrp > priceMin).
+    mrp: {
+        type: Number,
+        min: [0, 'MRP cannot be negative'],
+        default: null,
+    },
     image: {
         type: String,
         default: '', // URL to image
