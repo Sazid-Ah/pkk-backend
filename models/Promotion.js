@@ -14,6 +14,9 @@ const promotionSchema = new mongoose.Schema({
         of: String,
         default: { en: '' },
     },
+    // Cart-level discount carried by this promotion. When active, it applies as a
+    // percentage off the product subtotal at checkout (the highest active wins).
+    discountPercentage: { type: Number, default: 0, min: 0, max: 100 },
     image: { type: String, default: '' },          // optional banner image URL
     badge: { type: String, default: '' },           // small eyebrow label, e.g. "Limited offer"
     ctaText: { type: String, default: '' },          // button label, e.g. "Shop deals"

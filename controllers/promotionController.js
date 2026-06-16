@@ -50,7 +50,7 @@ const getAllPromotions = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const createPromotion = asyncHandler(async (req, res) => {
     const {
-        title, subtitle, image, badge, ctaText, linkType, linkUrl, linkRef,
+        title, subtitle, discountPercentage, image, badge, ctaText, linkType, linkUrl, linkRef,
         theme, isActive, sortOrder, startsAt, endsAt, autoTranslate,
     } = req.body;
 
@@ -59,6 +59,7 @@ const createPromotion = asyncHandler(async (req, res) => {
     const promotion = await Promotion.create({
         title: titleMap,
         subtitle: subtitleMap,
+        discountPercentage: Math.min(100, Math.max(0, Number(discountPercentage) || 0)),
         image: image || '',
         badge: badge || '',
         ctaText: ctaText || '',
@@ -86,9 +87,13 @@ const updatePromotion = asyncHandler(async (req, res) => {
     }
 
     const {
-        title, subtitle, image, badge, ctaText, linkType, linkUrl, linkRef,
+        title, subtitle, discountPercentage, image, badge, ctaText, linkType, linkUrl, linkRef,
         theme, isActive, sortOrder, startsAt, endsAt, autoTranslate,
     } = req.body;
+
+    if (discountPercentage !== undefined) {
+        promotion.discountPercentage = Math.min(100, Math.max(0, Number(discountPercentage) || 0));
+    }
 
     if (title !== undefined || subtitle !== undefined || autoTranslate) {
         const { titleMap, subtitleMap } = await buildLocalizedContent(

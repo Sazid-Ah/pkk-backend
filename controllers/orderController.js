@@ -2,7 +2,7 @@ const asyncHandler = require('express-async-handler');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const Order = require('../models/Order');
-const GlobalSettings = require('../models/GlobalSettings');
+const Promotion = require('../models/Promotion');
 const RefundLog = require('../models/RefundLog');
 const Notification = require('../models/Notification');
 const { sendOrderCancellationEmail } = require('../utils/emailService');
@@ -32,9 +32,17 @@ const addOrderItems = asyncHandler(async (req, res) => {
         throw new Error('No order items');
     }
 
-    // 1. Fetch Global Settings for Discount
-    const settings = await GlobalSettings.findOne();
-    const discountPercentage = (settings && settings.isDiscountActive) ? settings.discountPercentage : 0;
+    // 1. Discount comes from active promotions — the highest active one wins.
+    const now = new Date();
+    const activePromos = await Promotion.find({
+        isActive: true,
+        discountPercentage: { $gt: 0 },
+        $and: [
+            { $or: [{ startsAt: null }, { startsAt: { $lte: now } }] },
+            { $or: [{ endsAt: null }, { endsAt: { $gte: now } }] },
+        ],
+    }).select('discountPercentage');
+    const discountPercentage = activePromos.reduce((max, p) => Math.max(max, p.discountPercentage || 0), 0);
 
     // 2. Calculate Totals Server-side
     let subtotal = 0;
