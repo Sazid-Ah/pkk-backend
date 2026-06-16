@@ -105,7 +105,7 @@ const getAdminStats = asyncHandler(async (req, res) => {
         { $sort: { bookingCount: -1 } },
         { $limit: 5 },
         { $lookup: { from: 'pandits', localField: '_id', foreignField: '_id', as: 'panditInfo' } },
-        { $unwind: { path: '$panditInfo', preserveNullAndEmpty: true } },
+        { $unwind: { path: '$panditInfo', preserveNullAndEmptyArrays: true } },
         { $project: { _id: 0, name: '$panditInfo.name', bookingCount: 1, revenue: 1, rating: '$panditInfo.rating' } },
     ]);
     const topPandits = topPanditAgg;
