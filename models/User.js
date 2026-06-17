@@ -35,6 +35,16 @@ const userSchema = new mongoose.Schema({
     otpExpiry: {
         type: Date,
     },
+    // Distinguishes what a pending OTP is for: 'profile' | 'email-current' | 'email-new'
+    otpPurpose: {
+        type: String,
+        default: '',
+    },
+    // Holds the requested new email during the two-step email-change flow
+    pendingEmail: {
+        type: String,
+        default: '',
+    },
     resetToken: {
         type: String,
     },

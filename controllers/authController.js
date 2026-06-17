@@ -701,6 +701,140 @@ const changePassword = asyncHandler(async (req, res) => {
     res.json({ success: true, message: 'Password changed successfully' });
 });
 
+// ── Account change verification (OTP) ─────────────────────────────────────────
+const OTP_MINUTES = () => parseInt(process.env.OTP_EXPIRY_MINUTES) || 10;
+const makeOtp = () => crypto.randomInt(100000, 1000000).toString();
+const otpValid = (user, otp, purpose) =>
+    !!user.otp && user.otpPurpose === purpose && user.otp === String(otp || '').trim() &&
+    !!user.otpExpiry && user.otpExpiry > new Date();
+
+const userPayload = (u) => ({
+    _id: u.id,
+    username: u.username,
+    fullName: u.fullName,
+    email: u.email,
+    phoneNumber: u.phoneNumber,
+    role: u.role,
+    avatar: u.avatar || u.image,
+    addresses: u.addresses,
+    token: generateAccessToken(u._id),
+});
+
+// @desc    Request an OTP to confirm an identity (profile) change
+// @route   POST /api/auth/account/request-otp
+// @access  Private
+const requestProfileOtp = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id);
+    if (!user) { res.status(404); throw new Error('User not found'); }
+    const otp = makeOtp();
+    user.otp = otp;
+    user.otpPurpose = 'profile';
+    user.otpExpiry = new Date(Date.now() + OTP_MINUTES() * 60 * 1000);
+    await user.save();
+    try {
+        await sendOTPEmail(user.email, otp, user.username || user.email, 'Verify profile change - Pandit Katha Kalyan', 'Confirm Profile Update');
+    } catch (e) {
+        res.status(500); throw new Error('Could not send verification code. Please try again.');
+    }
+    res.json({ success: true, message: 'Verification code sent to your email' });
+});
+
+// @desc    Apply identity changes after OTP verification
+// @route   PUT /api/auth/account/profile
+// @access  Private
+const updateProfileVerified = asyncHandler(async (req, res) => {
+    const { otp, fullName, username, phoneNumber } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) { res.status(404); throw new Error('User not found'); }
+    if (!otpValid(user, otp, 'profile')) {
+        res.status(400); throw new Error('Invalid or expired verification code');
+    }
+    if (username && username.trim().toLowerCase() !== user.username) {
+        const exists = await User.findOne({ username: username.trim().toLowerCase() });
+        if (exists) { res.status(400); throw new Error('Username already taken'); }
+        user.username = username.trim().toLowerCase();
+    }
+    if (fullName !== undefined) user.fullName = String(fullName).trim();
+    if (phoneNumber !== undefined) user.phoneNumber = phoneNumber;
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+    user.otpPurpose = '';
+    const updated = await user.save();
+    res.json(userPayload(updated));
+});
+
+// @desc    Email change step 1 — send OTP to the current email
+// @route   POST /api/auth/account/email/start
+// @access  Private
+const startEmailChange = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id);
+    if (!user) { res.status(404); throw new Error('User not found'); }
+    const otp = makeOtp();
+    user.otp = otp;
+    user.otpPurpose = 'email-current';
+    user.otpExpiry = new Date(Date.now() + OTP_MINUTES() * 60 * 1000);
+    user.pendingEmail = '';
+    await user.save();
+    try {
+        await sendOTPEmail(user.email, otp, user.username || user.email, 'Verify email change - Pandit Katha Kalyan', 'Confirm Your Current Email');
+    } catch (e) {
+        res.status(500); throw new Error('Could not send verification code. Please try again.');
+    }
+    res.json({ success: true, message: 'Verification code sent to your current email' });
+});
+
+// @desc    Email change step 2 — verify current OTP, capture new email, send OTP to new email
+// @route   POST /api/auth/account/email/confirm-current
+// @access  Private
+const confirmCurrentEmail = asyncHandler(async (req, res) => {
+    const { otp, newEmail } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) { res.status(404); throw new Error('User not found'); }
+    if (!otpValid(user, otp, 'email-current')) {
+        res.status(400); throw new Error('Invalid or expired verification code');
+    }
+    const email = String(newEmail || '').trim().toLowerCase();
+    const v = validateEmail(email);
+    if (!v.valid) { res.status(400); throw new Error(v.error); }
+    if (email === user.email) { res.status(400); throw new Error('That is already your email'); }
+    const taken = await User.findOne({ email });
+    if (taken) { res.status(400); throw new Error('That email is already in use'); }
+
+    const otp2 = makeOtp();
+    user.pendingEmail = email;
+    user.otp = otp2;
+    user.otpPurpose = 'email-new';
+    user.otpExpiry = new Date(Date.now() + OTP_MINUTES() * 60 * 1000);
+    await user.save();
+    try {
+        await sendOTPEmail(email, otp2, user.username || email, 'Verify your new email - Pandit Katha Kalyan', 'Confirm Your New Email');
+    } catch (e) {
+        res.status(500); throw new Error('Could not send a code to the new email. Please try again.');
+    }
+    res.json({ success: true, message: 'Verification code sent to your new email' });
+});
+
+// @desc    Email change step 3 — verify new-email OTP and apply the change
+// @route   POST /api/auth/account/email/confirm-new
+// @access  Private
+const confirmNewEmail = asyncHandler(async (req, res) => {
+    const { otp } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) { res.status(404); throw new Error('User not found'); }
+    if (!otpValid(user, otp, 'email-new') || !user.pendingEmail) {
+        res.status(400); throw new Error('Invalid or expired verification code');
+    }
+    const taken = await User.findOne({ email: user.pendingEmail });
+    if (taken) { res.status(400); throw new Error('That email is already in use'); }
+    user.email = user.pendingEmail;
+    user.pendingEmail = '';
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+    user.otpPurpose = '';
+    const updated = await user.save();
+    res.json(userPayload(updated));
+});
+
 // @desc    Get user data
 // @route   GET /api/auth/me
 // @access  Private
@@ -1049,6 +1183,11 @@ module.exports = {
     getMe,
     updateProfile,
     changePassword,
+    requestProfileOtp,
+    updateProfileVerified,
+    startEmailChange,
+    confirmCurrentEmail,
+    confirmNewEmail,
     getUsers,
     getLoginLogs,
     requestRegisterOTP,

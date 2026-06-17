@@ -13,6 +13,11 @@ const {
     getMe,
     updateProfile,
     changePassword,
+    requestProfileOtp,
+    updateProfileVerified,
+    startEmailChange,
+    confirmCurrentEmail,
+    confirmNewEmail,
     getUsers,
     getLoginLogs,
     requestRegisterOTP,
@@ -36,6 +41,13 @@ router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);
+
+// OTP-verified account changes (identity fields + two-step email change)
+router.post('/account/request-otp', protect, authLimiter, requestProfileOtp);
+router.put('/account/profile', protect, updateProfileVerified);
+router.post('/account/email/start', protect, authLimiter, startEmailChange);
+router.post('/account/email/confirm-current', protect, authLimiter, confirmCurrentEmail);
+router.post('/account/email/confirm-new', protect, confirmNewEmail);
 router.get('/users', protect, employee, getUsers);
 router.get('/login-logs', protect, admin, getLoginLogs);
 
