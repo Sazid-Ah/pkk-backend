@@ -203,9 +203,11 @@ const processOrderRefund = async (order) => {
     }
 };
 
+// Customer-facing flow is 3 steps: Confirmed → Shipped → Delivered (+ Cancelled).
+// `Processing` kept only as a legacy passthrough for any old orders.
 const ORDER_TRANSITIONS = {
-    Pending: ['Confirmed', 'Processing', 'Cancelled'],
-    Confirmed: ['Processing', 'Cancelled'],
+    Pending: ['Confirmed', 'Cancelled'],
+    Confirmed: ['Shipped', 'Cancelled'],
     Processing: ['Shipped', 'Cancelled'],
     Shipped: ['Delivered'],
     Delivered: [],
