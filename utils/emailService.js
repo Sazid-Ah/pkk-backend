@@ -3,14 +3,27 @@ const { generateOrderInvoicePdf, generateBookingInvoicePdf } = require('./invoic
 
 // Create reusable transporter
 const createTransporter = () => {
+    const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+    // Derive `secure` from the port when not explicitly set:
+    // 465 = implicit TLS (secure:true); 587/25 = STARTTLS (secure:false).
+    // A port/secure mismatch is a common cause of CONN timeouts.
+    const secure = process.env.SMTP_SECURE !== undefined
+        ? process.env.SMTP_SECURE === 'true'
+        : port === 465;
     return nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true', // true for port 465 (Zoho)
+        port,
+        secure,
         auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASSWORD,
         },
+        // Fail fast instead of hanging ~2 min when SMTP egress is blocked/misrouted.
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        // Some cloud hosts (incl. Render) have flaky IPv6 egress to SMTP hosts — force IPv4.
+        family: 4,
     });
 };
 
