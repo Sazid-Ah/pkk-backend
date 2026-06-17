@@ -397,7 +397,7 @@ const requestDeleteOTP = asyncHandler(async (req, res) => {
 
     // Send OTP via email with specific deletion theme
     try {
-        await sendOTPEmail(user.email, otp, user.username, 'Account Deletion OTP - PKK App', 'Account Deletion Request');
+        await sendOTPEmail(user.email, otp, user.username, 'Account Deletion OTP - Pandit Katha Kalyan', 'Account Deletion Request');
         res.status(200).json({
             success: true,
             message: 'Deletion verification code sent to your email',
@@ -799,7 +799,7 @@ const requestRegisterOTP = asyncHandler(async (req, res) => {
 
     // Send OTP via email
     try {
-        await sendOTPEmail(email, otp, 'Valued Customer', 'Registration OTP - PKK App', 'Email Verification');
+        await sendOTPEmail(email, otp, 'Valued Customer', 'Registration OTP - Pandit Katha Kalyan', 'Email Verification');
         res.status(200).json({
             success: true,
             message: 'OTP sent to your email',

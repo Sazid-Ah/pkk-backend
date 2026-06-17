@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { generateOrderInvoicePdf, generateBookingInvoicePdf } = require('./invoicePdf');
 
 // Create reusable transporter
 const createTransporter = () => {
@@ -14,12 +15,12 @@ const createTransporter = () => {
 };
 
 // Send OTP email
-const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP - PKK App', title = 'Password Reset Request') => {
+const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP - Pandit Katha Kalyan', title = 'Password Reset Request') => {
     try {
         const transporter = createTransporter();
 
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
             subject: subject,
             html: `
@@ -56,7 +57,7 @@ const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP 
                             
                             <p>If you didn't request this, please ignore this email or contact support if you have concerns.</p>
                             
-                            <p>Best regards,<br>PKK Team</p>
+                            <p>Best regards,<br>Pandit Katha Kalyan Team</p>
                         </div>
                         <div class="footer">
                             <p>This is an automated email. Please do not reply to this message.</p>
@@ -82,9 +83,9 @@ const sendPasswordResetConfirmation = async (email, username) => {
         const transporter = createTransporter();
 
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
-            subject: 'Password Reset Successful - PKK App',
+            subject: 'Password Reset Successful - Pandit Katha Kalyan',
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -115,7 +116,7 @@ const sendPasswordResetConfirmation = async (email, username) => {
                             
                             <p>If you didn't make this change, please contact our support team immediately to secure your account.</p>
                             
-                            <p>Best regards,<br>PKK Team</p>
+                            <p>Best regards,<br>Pandit Katha Kalyan Team</p>
                         </div>
                         <div class="footer">
                             <p>This is an automated email. Please do not reply to this message.</p>
@@ -140,9 +141,9 @@ const sendBookingCancellationEmail = async (email, username, bookingId, amount) 
     try {
         const transporter = createTransporter();
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
-            subject: 'Booking Cancellation Confirmation - PKK App',
+            subject: 'Booking Cancellation Confirmation - Pandit Katha Kalyan',
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -164,7 +165,7 @@ const sendBookingCancellationEmail = async (email, username, bookingId, amount) 
                             <p>Your booking <strong>#${bookingId}</strong> has been cancelled successfully.</p>
                             <p class="amount">Refund Amount: ₹${amount.toFixed(2)}</p>
                             <p>If you have any questions, please contact support.</p>
-                            <p>Thanks,<br>PKK Team</p>
+                            <p>Thanks,<br>Pandit Katha Kalyan Team</p>
                         </div>
                         <div class="footer">This is an automated message. Please do not reply directly.</div>
                     </div>
@@ -185,9 +186,9 @@ const sendOrderCancellationEmail = async (email, username, orderId, amount) => {
     try {
         const transporter = createTransporter();
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
-            subject: 'Order Cancellation Confirmation - PKK App',
+            subject: 'Order Cancellation Confirmation - Pandit Katha Kalyan',
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -209,7 +210,7 @@ const sendOrderCancellationEmail = async (email, username, orderId, amount) => {
                             <p>Your order <strong>#${orderId}</strong> has been cancelled successfully.</p>
                             <p class="amount">Refund Amount: ₹${amount.toFixed(2)}</p>
                             <p>If you have any questions, please contact support.</p>
-                            <p>Thanks,<br>PKK Team</p>
+                            <p>Thanks,<br>Pandit Katha Kalyan Team</p>
                         </div>
                         <div class="footer">This is an automated message. Please do not reply directly.</div>
                     </div>
@@ -231,9 +232,9 @@ const sendInquiryEmail = async ({ name, email, phone, subject, message }) => {
         const transporter = createTransporter();
         const to = process.env.CONTACT_NOTIFICATION_EMAILS || process.env.SMTP_USER;
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to,
-            subject: subject ? `New Contact Inquiry: ${subject}` : 'New Contact Inquiry - PKK App',
+            subject: subject ? `New Contact Inquiry: ${subject}` : 'New Contact Inquiry - Pandit Katha Kalyan',
             html: `
                 <!DOCTYPE html>
                 <html>
@@ -258,7 +259,7 @@ const sendInquiryEmail = async ({ name, email, phone, subject, message }) => {
                             ${phone ? `<div class="field"><div class="label">Phone</div><div class="value">${phone}</div></div>` : ''}
                             <div class="field"><div class="label">Subject</div><div class="value">${subject}</div></div>
                             <div class="field"><div class="label">Message</div><div class="value">${message}</div></div>
-                            <div class="footer">This inquiry was submitted through the PKK contact form.</div>
+                            <div class="footer">This inquiry was submitted through the Pandit Katha Kalyan contact form.</div>
                         </div>
                     </div>
                 </body>
@@ -282,10 +283,12 @@ const sendOrderConfirmationEmail = async (email, username, order) => {
         const rows = (order.items || []).map(i =>
             `<tr><td style="padding:6px 0;color:#4b5563">${i.name} × ${i.quantity || 1}</td><td style="padding:6px 0;text-align:right;color:#111827">₹${((Number(i.price) || 0) * (Number(i.quantity) || 1)).toFixed(2)}</td></tr>`
         ).join('');
+        const pdf = await generateOrderInvoicePdf(order);
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
-            subject: `Order Confirmed #${shortId} - PKK App`,
+            subject: `Order Confirmed #${shortId} - Pandit Katha Kalyan`,
+            attachments: pdf ? [{ filename: `Invoice-${order.invoiceNumber || shortId}.pdf`, content: pdf, contentType: 'application/pdf' }] : [],
             html: `
                 <!DOCTYPE html><html><head><style>
                     body{font-family:Arial,sans-serif;color:#333;line-height:1.5}
@@ -304,8 +307,8 @@ const sendOrderConfirmationEmail = async (email, username, order) => {
                         <table>${rows}</table>
                         <p class="total">Total: ₹${(Number(order.totalAmount) || 0).toFixed(2)}</p>
                         <p>Payment: ${order.paymentMethod === 'CashOnDelivery' ? 'Cash on Delivery' : 'Online (Razorpay)'}</p>
-                        <p>You can view your order and download the invoice from the Orders page.</p>
-                        <p>Thanks,<br>PKK Team</p>
+                        <p>${pdf ? 'Your invoice is attached as a PDF.' : 'You can download your invoice from the Orders page.'}</p>
+                        <p>Thanks,<br>Pandit Katha Kalyan Team</p>
                     </div>
                     <div class="footer">This is an automated message. Please do not reply directly.</div>
                 </div></body></html>
@@ -326,10 +329,12 @@ const sendBookingConfirmationEmail = async (email, username, booking) => {
         const shortId = String(booking._id).slice(-6).toUpperCase();
         const total = Number(booking.totalAmount) || Number(booking.price) || 0;
         const when = booking.bookingDate ? new Date(booking.bookingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        const pdf = await generateBookingInvoicePdf(booking);
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
-            subject: `Booking Confirmed #${shortId} - PKK App`,
+            subject: `Booking Confirmed #${shortId} - Pandit Katha Kalyan`,
+            attachments: pdf ? [{ filename: `Invoice-${booking.invoiceNumber || shortId}.pdf`, content: pdf, contentType: 'application/pdf' }] : [],
             html: `
                 <!DOCTYPE html><html><head><style>
                     body{font-family:Arial,sans-serif;color:#333;line-height:1.5}
@@ -349,7 +354,8 @@ const sendBookingConfirmationEmail = async (email, username, booking) => {
                         <p>Service fee: ₹${(Number(booking.price) || 0).toFixed(2)}${booking.gstAmount ? ` + GST ₹${Number(booking.gstAmount).toFixed(2)}` : ''}</p>
                         <p class="total">Total: ₹${total.toFixed(2)}</p>
                         <p>Payment: ${booking.paymentMethod === 'Online' ? 'Online (Razorpay)' : 'Pay After Service'}</p>
-                        <p>Thanks,<br>PKK Team</p>
+                        <p>${pdf ? 'Your invoice is attached as a PDF.' : 'You can download your invoice from the Bookings page.'}</p>
+                        <p>Thanks,<br>Pandit Katha Kalyan Team</p>
                     </div>
                     <div class="footer">This is an automated message. Please do not reply directly.</div>
                 </div></body></html>

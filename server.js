@@ -19,7 +19,7 @@ if (missingVars.length > 0) {
 
 const port = process.env.PORT || 8080;
 
-console.log('🚀 Starting PKK Backend...');
+console.log('🚀 Starting Pandit Katha Kalyan Backend...');
 console.log('Environment:', process.env.NODE_ENV || 'development');
 
 const app = express();
@@ -122,7 +122,7 @@ for (const route of routes) {
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
 
 app.get('/', (req, res) => {
-    res.json({ message: 'PKK Backend is running' });
+    res.json({ message: 'Pandit Katha Kalyan Backend is running' });
 });
 
 app.use((err, req, res, next) => {
