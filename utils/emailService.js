@@ -275,10 +275,101 @@ const sendInquiryEmail = async ({ name, email, phone, subject, message }) => {
     }
 };
 
+const sendOrderConfirmationEmail = async (email, username, order) => {
+    try {
+        const transporter = createTransporter();
+        const shortId = String(order._id).slice(-6).toUpperCase();
+        const rows = (order.items || []).map(i =>
+            `<tr><td style="padding:6px 0;color:#4b5563">${i.name} × ${i.quantity || 1}</td><td style="padding:6px 0;text-align:right;color:#111827">₹${((Number(i.price) || 0) * (Number(i.quantity) || 1)).toFixed(2)}</td></tr>`
+        ).join('');
+        const mailOptions = {
+            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            to: email,
+            subject: `Order Confirmed #${shortId} - PKK App`,
+            html: `
+                <!DOCTYPE html><html><head><style>
+                    body{font-family:Arial,sans-serif;color:#333;line-height:1.5}
+                    .container{max-width:600px;margin:0 auto;padding:20px}
+                    .header{background:#16a34a;color:#fff;padding:20px;border-radius:10px 10px 0 0;text-align:center}
+                    .content{background:#fafafa;padding:30px;border-radius:0 0 10px 10px}
+                    table{width:100%;border-collapse:collapse}
+                    .total{font-size:20px;font-weight:bold;color:#111827;margin-top:16px}
+                    .footer{color:#6b7280;font-size:13px;margin-top:30px}
+                </style></head><body><div class="container">
+                    <div class="header"><h1>Order Confirmed</h1></div>
+                    <div class="content">
+                        <p>Hi <strong>${username}</strong>,</p>
+                        <p>Thank you! Your order <strong>#${shortId}</strong> has been placed.</p>
+                        ${order.invoiceNumber ? `<p style="color:#6b7280;font-size:13px">Invoice: ${order.invoiceNumber}</p>` : ''}
+                        <table>${rows}</table>
+                        <p class="total">Total: ₹${(Number(order.totalAmount) || 0).toFixed(2)}</p>
+                        <p>Payment: ${order.paymentMethod === 'CashOnDelivery' ? 'Cash on Delivery' : 'Online (Razorpay)'}</p>
+                        <p>You can view your order and download the invoice from the Orders page.</p>
+                        <p>Thanks,<br>PKK Team</p>
+                    </div>
+                    <div class="footer">This is an automated message. Please do not reply directly.</div>
+                </div></body></html>
+            `,
+        };
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Order confirmation email sent:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('Error sending order confirmation email:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+const sendBookingConfirmationEmail = async (email, username, booking) => {
+    try {
+        const transporter = createTransporter();
+        const shortId = String(booking._id).slice(-6).toUpperCase();
+        const total = Number(booking.totalAmount) || Number(booking.price) || 0;
+        const when = booking.bookingDate ? new Date(booking.bookingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        const mailOptions = {
+            from: `"${process.env.SMTP_FROM_NAME || 'PKK App'}" <${process.env.SMTP_FROM_EMAIL}>`,
+            to: email,
+            subject: `Booking Confirmed #${shortId} - PKK App`,
+            html: `
+                <!DOCTYPE html><html><head><style>
+                    body{font-family:Arial,sans-serif;color:#333;line-height:1.5}
+                    .container{max-width:600px;margin:0 auto;padding:20px}
+                    .header{background:#ea580c;color:#fff;padding:20px;border-radius:10px 10px 0 0;text-align:center}
+                    .content{background:#fafafa;padding:30px;border-radius:0 0 10px 10px}
+                    .row{display:flex;justify-content:space-between;padding:4px 0;color:#4b5563}
+                    .total{font-size:20px;font-weight:bold;color:#111827;margin-top:16px}
+                    .footer{color:#6b7280;font-size:13px;margin-top:30px}
+                </style></head><body><div class="container">
+                    <div class="header"><h1>Booking Confirmed</h1></div>
+                    <div class="content">
+                        <p>Hi <strong>${username}</strong>,</p>
+                        <p>Your booking <strong>#${shortId}</strong> for <strong>${booking.occasion || 'a puja'}</strong> is confirmed.</p>
+                        ${booking.invoiceNumber ? `<p style="color:#6b7280;font-size:13px">Invoice: ${booking.invoiceNumber}</p>` : ''}
+                        <p>Date: ${when}${booking.timeSlot ? ` · Slot: ${booking.timeSlot}` : ''}</p>
+                        <p>Service fee: ₹${(Number(booking.price) || 0).toFixed(2)}${booking.gstAmount ? ` + GST ₹${Number(booking.gstAmount).toFixed(2)}` : ''}</p>
+                        <p class="total">Total: ₹${total.toFixed(2)}</p>
+                        <p>Payment: ${booking.paymentMethod === 'Online' ? 'Online (Razorpay)' : 'Pay After Service'}</p>
+                        <p>Thanks,<br>PKK Team</p>
+                    </div>
+                    <div class="footer">This is an automated message. Please do not reply directly.</div>
+                </div></body></html>
+            `,
+        };
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Booking confirmation email sent:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error('Error sending booking confirmation email:', error);
+        return { success: false, error: error.message };
+    }
+};
+
 module.exports = {
     sendOTPEmail,
     sendPasswordResetConfirmation,
     sendBookingCancellationEmail,
     sendOrderCancellationEmail,
+    sendOrderConfirmationEmail,
+    sendBookingConfirmationEmail,
     sendInquiryEmail,
 };

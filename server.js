@@ -98,6 +98,8 @@ const routes = [
     { path: '/api/settings', file: './routes/settingsRoutes' },
     { path: '/api/global-settings', file: './routes/globalSettingsRoutes' },
     { path: '/api/promotions', file: './routes/promotionRoutes' },
+    { path: '/api/wishlist', file: './routes/wishlistRoutes' },
+    { path: '/api/pandit-applications', file: './routes/panditApplicationRoutes' },
     { path: '/api/reviews', file: './routes/reviewRoutes' },
     { path: '/api/contact', file: './routes/contactRoutes' },
     { path: '/api/notifications', file: './routes/notificationRoutes' },

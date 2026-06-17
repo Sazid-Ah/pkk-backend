@@ -1,10 +1,15 @@
 const mongoose = require('mongoose');
+const { makeInvoiceNumber } = require('../utils/invoiceNumber');
 
 const bookingSchema = new mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
+    },
+    invoiceNumber: {
+        type: String,
+        index: true,
     },
     pandit: {
         type: mongoose.Schema.Types.ObjectId,
@@ -26,6 +31,19 @@ const bookingSchema = new mongoose.Schema({
     price: {
         type: Number,
         required: true,
+    },
+    // Base service fee is `price`; 18% GST is added on top (aligns with order-services).
+    gstPercentage: {
+        type: Number,
+        default: 18,
+    },
+    gstAmount: {
+        type: Number,
+        default: 0,
+    },
+    totalAmount: {
+        type: Number,
+        default: 0,
     },
     status: {
         type: String,
@@ -78,5 +96,13 @@ bookingSchema.index(
         name: 'unique_active_slot',
     }
 );
+
+// Stamp a stable invoice number on first save (persistent record of the booking).
+bookingSchema.pre('save', function (next) {
+    if (!this.invoiceNumber) {
+        this.invoiceNumber = makeInvoiceNumber('BK', this._id, this.createdAt);
+    }
+    next();
+});
 
 module.exports = mongoose.model('Booking', bookingSchema);

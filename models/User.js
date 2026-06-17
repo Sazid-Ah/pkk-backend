@@ -77,6 +77,11 @@ const userSchema = new mongoose.Schema({
         country: { type: String, default: 'India' },
         isDefault: { type: Boolean, default: false }
     }],
+    wishlist: [{
+        itemType: { type: String, enum: ['product', 'pandit'], required: true },
+        itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
+        addedAt: { type: Date, default: Date.now },
+    }],
     isDeletionPending: {
         type: Boolean,
         default: false,

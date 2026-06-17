@@ -50,6 +50,24 @@ const getProductById = asyncHandler(async (req, res) => {
 const createProduct = asyncHandler(async (req, res) => {
     const { name, category, price, image, description, weight, type, includedItems, gstPercentage, mrp } = req.body;
 
+    if (!name || !String(name).trim()) {
+        res.status(400);
+        throw new Error('Product name is required');
+    }
+    if (!category || !String(category).trim()) {
+        res.status(400);
+        throw new Error('Category is required');
+    }
+    if (type === 'package') {
+        if (!includedItems || !includedItems.length) {
+            res.status(400);
+            throw new Error('A package must include at least one item');
+        }
+    } else if (!price || Number(price) <= 0) {
+        res.status(400);
+        throw new Error('Price must be greater than 0');
+    }
+
     let finalPrice = price;
     if (type === 'package' && includedItems && includedItems.length > 0) {
         finalPrice = includedItems.reduce((acc, item) => acc + Number(item.price), 0);

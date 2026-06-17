@@ -5,7 +5,25 @@ const Order = require('../models/Order');
 const Promotion = require('../models/Promotion');
 const RefundLog = require('../models/RefundLog');
 const Notification = require('../models/Notification');
-const { sendOrderCancellationEmail } = require('../utils/emailService');
+const User = require('../models/User');
+const { sendOrderCancellationEmail, sendOrderConfirmationEmail } = require('../utils/emailService');
+
+// Best-effort alert to all admins when an automated refund fails.
+const notifyAdminsRefundFailure = async ({ kind, id, amount, reason }) => {
+    try {
+        const admins = await User.find({ role: 'admin' }).select('_id');
+        const shortId = String(id).slice(-6).toUpperCase();
+        await Promise.all(admins.map((a) => Notification.create({
+            user: a._id,
+            type: 'system',
+            title: 'Refund failed',
+            message: `Refund of ₹${Number(amount || 0).toFixed(2)} for ${kind} #${shortId} failed: ${reason || 'unknown error'}. Please resolve manually.`,
+            link: kind === 'order' ? '/admin/orders' : '/admin/bookings',
+        })));
+    } catch (e) {
+        console.error('Failed to notify admins of refund failure:', e.message);
+    }
+};
 
 
 const razorpay = new Razorpay({
@@ -30,6 +48,14 @@ const addOrderItems = asyncHandler(async (req, res) => {
     if (!items || items.length === 0) {
         res.status(400);
         throw new Error('No order items');
+    }
+
+    // Validate each item's structure before pricing.
+    for (const it of items) {
+        if (!it || Number(it.price) <= 0 || Number(it.quantity) <= 0 || !['product', 'pandit'].includes(it.type)) {
+            res.status(400);
+            throw new Error('Invalid order item: each item needs a valid type, price and quantity');
+        }
     }
 
     // 1. Discount comes from active promotions — the highest active one wins.
@@ -80,6 +106,13 @@ const addOrderItems = asyncHandler(async (req, res) => {
     });
 
     const createdOrder = await order.save();
+
+    // COD orders are confirmed immediately — send a confirmation now.
+    // (Online orders get their confirmation after payment is verified.)
+    if ((paymentMethod || 'Razorpay') === 'CashOnDelivery' && req.user?.email) {
+        sendOrderConfirmationEmail(req.user.email, req.user.fullName || req.user.username || req.user.email, createdOrder).catch(() => {});
+    }
+
     res.status(201).json(createdOrder);
 });
 
@@ -166,6 +199,7 @@ const processOrderRefund = async (order) => {
             status: 'failed',
             failureReason: error.message || 'Razorpay refund failed',
         });
+        notifyAdminsRefundFailure({ kind: 'order', id: order._id, amount: order.totalAmount, reason: error.message }).catch(() => {});
         return order;
     }
 };
@@ -299,6 +333,12 @@ const verifyPayment = asyncHandler(async (req, res) => {
         order.paymentStatus = 'Paid';
         order.status = 'Confirmed';
         const updatedOrder = await order.save();
+        try {
+            await order.populate('user', 'username fullName email');
+            if (order.user?.email) {
+                sendOrderConfirmationEmail(order.user.email, order.user.fullName || order.user.username, updatedOrder).catch(() => {});
+            }
+        } catch { /* email is best-effort */ }
         return res.json({ message: 'Payment verified successfully', order: updatedOrder });
     } else {
         order.paymentStatus = 'Failed';
@@ -383,10 +423,13 @@ const getOrderHistory = asyncHandler(async (req, res) => {
     if (startDate || endDate) {
         query.createdAt = {};
         if (startDate) {
-            query.createdAt.$gte = new Date(startDate);
+            const start = new Date(startDate);
+            if (isNaN(start.getTime())) { res.status(400); throw new Error('Invalid startDate'); }
+            query.createdAt.$gte = start;
         }
         if (endDate) {
             const end = new Date(endDate);
+            if (isNaN(end.getTime())) { res.status(400); throw new Error('Invalid endDate'); }
             end.setHours(23, 59, 59, 999);
             query.createdAt.$lte = end;
         }

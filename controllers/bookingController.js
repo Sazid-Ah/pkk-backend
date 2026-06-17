@@ -2,9 +2,27 @@ const asyncHandler = require('express-async-handler');
 const Booking = require('../models/Booking');
 const RefundLog = require('../models/RefundLog');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-const { sendBookingCancellationEmail } = require('../utils/emailService');
+const { sendBookingCancellationEmail, sendBookingConfirmationEmail } = require('../utils/emailService');
+
+// Best-effort alert to all admins when an automated refund fails.
+const notifyAdminsRefundFailure = async ({ id, amount, reason }) => {
+    try {
+        const admins = await User.find({ role: 'admin' }).select('_id');
+        const shortId = String(id).slice(-6).toUpperCase();
+        await Promise.all(admins.map((a) => Notification.create({
+            user: a._id,
+            type: 'system',
+            title: 'Refund failed',
+            message: `Refund of ₹${Number(amount || 0).toFixed(2)} for booking #${shortId} failed: ${reason || 'unknown error'}. Please resolve manually.`,
+            link: '/admin/bookings',
+        })));
+    } catch (e) {
+        console.error('Failed to notify admins of refund failure:', e.message);
+    }
+};
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -82,6 +100,14 @@ const createBooking = asyncHandler(async (req, res) => {
         throw new Error('This time slot is already booked. Please choose a different slot.');
     }
 
+    // Services carry 18% GST (consistent with order-services). `price` is the base fee.
+    const baseFee = Number(price) || 0;
+    const gstPercentage = 18;
+    const gstAmount = Math.round(baseFee * (gstPercentage / 100) * 100) / 100;
+    const totalAmount = baseFee + gstAmount;
+
+    const paymentMethod = req.body.paymentMethod === 'Online' ? 'Online' : 'PayAfterService';
+
     let booking;
     try {
         booking = await Booking.create({
@@ -91,7 +117,11 @@ const createBooking = asyncHandler(async (req, res) => {
             timeSlot: String(timeSlot),
             occasion,
             occasionRef: req.body.occasionRef || null,
-            price,
+            price: baseFee,
+            gstPercentage,
+            gstAmount,
+            totalAmount,
+            paymentMethod,
             notes,
             address,
         });
@@ -101,6 +131,21 @@ const createBooking = asyncHandler(async (req, res) => {
             throw new Error('This time slot was just booked by someone else. Please choose a different slot.');
         }
         throw err;
+    }
+
+    // Notify the assigned pandit (best-effort).
+    Notification.create({
+        user: pandit,
+        type: 'booking',
+        title: 'New booking',
+        message: `You have a new booking for ${occasion}.`,
+        link: '/pandit/bookings',
+    }).catch(() => {});
+
+    // Pay-after-service is confirmed on creation → email now.
+    // Online bookings get their confirmation after payment is verified.
+    if (paymentMethod === 'PayAfterService' && req.user?.email) {
+        sendBookingConfirmationEmail(req.user.email, req.user.fullName || req.user.username || req.user.email, booking).catch(() => {});
     }
 
     res.status(201).json(booking);
@@ -288,7 +333,9 @@ const processBookingRefund = async (booking) => {
         return booking;
     }
 
-    const refundAmountInPaise = Math.round((booking.price || 0) * 100);
+    // Refund the GST-inclusive total the customer actually paid.
+    const refundAmount = booking.totalAmount || booking.price || 0;
+    const refundAmountInPaise = Math.round(refundAmount * 100);
     try {
         const refund = await withRazorpayTimeout(
             razorpay.payments.refund(booking.razorpayPaymentId, { amount: refundAmountInPaise })
@@ -301,7 +348,7 @@ const processBookingRefund = async (booking) => {
             bookingId: booking._id,
             razorpayPaymentId: booking.razorpayPaymentId,
             razorpayRefundId: refund.id,
-            amount: booking.price,
+            amount: refundAmount,
             status: 'completed',
         });
 
@@ -318,10 +365,11 @@ const processBookingRefund = async (booking) => {
         await createRefundLog({
             bookingId: booking._id,
             razorpayPaymentId: booking.razorpayPaymentId,
-            amount: booking.price,
+            amount: refundAmount,
             status: 'failed',
             failureReason: error.message || 'Razorpay refund failed',
         });
+        notifyAdminsRefundFailure({ id: booking._id, amount: refundAmount, reason: error.message }).catch(() => {});
         return booking;
     }
 };
@@ -368,7 +416,9 @@ const createRazorpayBookingOrder = asyncHandler(async (req, res) => {
         throw new Error('Not authorized');
     }
 
-    const amountInPaise = Math.round(Number(booking.price) * 100);
+    // Charge the GST-inclusive total.
+    const chargeAmount = booking.totalAmount || booking.price || 0;
+    const amountInPaise = Math.round(Number(chargeAmount) * 100);
     const options = {
         amount: amountInPaise,
         currency: 'INR',
@@ -437,6 +487,12 @@ const verifyBookingPayment = asyncHandler(async (req, res) => {
         booking.paymentStatus = 'Paid';
         booking.paymentMethod = 'Online';
         await booking.save();
+        try {
+            await booking.populate('user', 'username fullName email');
+            if (booking.user?.email) {
+                sendBookingConfirmationEmail(booking.user.email, booking.user.fullName || booking.user.username, booking).catch(() => {});
+            }
+        } catch { /* email is best-effort */ }
         return res.json({ success: true, message: 'Payment verified successfully', booking });
     } else {
         booking.paymentStatus = 'Failed';

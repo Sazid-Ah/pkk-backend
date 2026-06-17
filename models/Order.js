@@ -1,10 +1,15 @@
 const mongoose = require('mongoose');
+const { makeInvoiceNumber } = require('../utils/invoiceNumber');
 
 const orderSchema = new mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
+    },
+    invoiceNumber: {
+        type: String,
+        index: true,
     },
     items: [{
         originalId: { type: mongoose.Schema.Types.ObjectId }, // ID of product or pandit
@@ -75,5 +80,13 @@ const orderSchema = new mongoose.Schema({
 
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
+
+// Stamp a stable invoice number on first save (a persistent record of the purchase).
+orderSchema.pre('save', function (next) {
+    if (!this.invoiceNumber) {
+        this.invoiceNumber = makeInvoiceNumber('ORD', this._id, this.createdAt);
+    }
+    next();
+});
 
 module.exports = mongoose.model('Order', orderSchema);
