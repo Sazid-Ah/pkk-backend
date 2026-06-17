@@ -98,11 +98,11 @@ bookingSchema.index(
 );
 
 // Stamp a stable invoice number on first save (persistent record of the booking).
-bookingSchema.pre('save', function (next) {
+// Mongoose 9 middleware is promise/sync style — no `next` callback.
+bookingSchema.pre('save', function () {
     if (!this.invoiceNumber) {
         this.invoiceNumber = makeInvoiceNumber('BK', this._id, this.createdAt);
     }
-    next();
 });
 
 module.exports = mongoose.model('Booking', bookingSchema);

@@ -145,22 +145,18 @@ const panditSchema = new mongoose.Schema({
 panditSchema.index({ location: '2dsphere' });
 
 
-panditSchema.pre('save', function (next) {
+// Mongoose 9 middleware is promise/async style — no `next` callback.
+panditSchema.pre('save', async function () {
     if ((this.isNew || this.isModified('specialty') || this.isModified('about')) &&
         (!this.translations || Object.keys(this.translations).length === 0)) {
-        generateTranslations({
-            specialty: this.specialty || '',
-            about: this.about || '',
-        })
-        .then(translations => {
-            this.translations = translations;
-            next();
-        })
-        .catch(e => {
-            next();
-        });
-    } else {
-        next();
+        try {
+            this.translations = await generateTranslations({
+                specialty: this.specialty || '',
+                about: this.about || '',
+            });
+        } catch (e) {
+            // non-fatal — translations can be populated later via script
+        }
     }
 });
 
