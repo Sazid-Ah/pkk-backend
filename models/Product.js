@@ -61,6 +61,7 @@ const productSchema = new mongoose.Schema({
         type: Object,
         default: {}
     },
+    // Displayed aggregate = blend of the admin seed and real user reviews.
     rating: {
         type: Number,
         min: 0,
@@ -68,6 +69,17 @@ const productSchema = new mongoose.Schema({
         default: 0,
     },
     numReviews: {
+        type: Number,
+        default: 0,
+    },
+    // Admin-set initial rating (seed) that user reviews blend into.
+    seedRating: {
+        type: Number,
+        min: 0,
+        max: 5,
+        default: 0,
+    },
+    seedReviews: {
         type: Number,
         default: 0,
     }

@@ -4,6 +4,7 @@ const Pandit = require('../models/Pandit');
 const Product = require('../models/Product');
 const Booking = require('../models/Booking');
 const Order = require('../models/Order');
+const { recomputeRating } = require('../utils/ratingUtils');
 
 // @desc    Add a review
 // @route   POST /api/reviews
@@ -42,8 +43,8 @@ const addReview = asyncHandler(async (req, res) => {
             if (!order) {
                 return res.status(404).json({ success: false, message: 'Order not found or not authorized' });
             }
-            if (order.status !== 'Completed') {
-                return res.status(400).json({ success: false, message: 'You can only review completed orders' });
+            if (order.status !== 'Delivered' && order.status !== 'Completed') {
+                return res.status(400).json({ success: false, message: 'You can only review delivered orders' });
             }
             // Find the specific item in the order
             const orderItem = order.items.find(item => item.originalId.toString() === itemId);
@@ -66,25 +67,13 @@ const addReview = asyncHandler(async (req, res) => {
             orderId: orderId || null
         });
 
-        // 3. Update the appropriate Model's average rating atomically to prevent race conditions
+        // 3. Recompute the displayed rating as a blend of the admin seed + all user reviews
         let updatedAverage = 0;
-        const ratingValue = Number(rating);
-        const ratingPipeline = [{
-            $set: {
-                numReviews: { $add: [{ $ifNull: ['$numReviews', 0] }, 1] },
-                rating: {
-                    $divide: [
-                        { $add: [{ $multiply: [{ $ifNull: ['$rating', 0] }, { $ifNull: ['$numReviews', 0] }] }, ratingValue] },
-                        { $add: [{ $ifNull: ['$numReviews', 0] }, 1] }
-                    ]
-                }
-            }
-        }];
         if (itemType === 'Pandit') {
-            const updated = await Pandit.findByIdAndUpdate(itemId, ratingPipeline, { new: true });
+            const updated = await recomputeRating(Pandit, itemId, 'Pandit');
             if (updated) updatedAverage = updated.rating;
         } else if (itemType === 'Product') {
-            const updated = await Product.findByIdAndUpdate(itemId, ratingPipeline, { new: true });
+            const updated = await recomputeRating(Product, itemId, 'Product');
             if (updated) updatedAverage = updated.rating;
         }
 

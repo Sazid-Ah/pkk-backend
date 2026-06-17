@@ -170,7 +170,7 @@ const getEmployeeStats = asyncHandler(async (req, res) => {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const completedToday = await Order.countDocuments({
-        status: 'Completed',
+        status: { $in: ['Delivered', 'Completed'] },
         updatedAt: { $gte: today, $lt: tomorrow }
     });
 

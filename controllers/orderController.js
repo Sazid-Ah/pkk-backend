@@ -204,10 +204,12 @@ const processOrderRefund = async (order) => {
 };
 
 const ORDER_TRANSITIONS = {
-    Pending: ['Processing', 'Cancelled'],
+    Pending: ['Confirmed', 'Processing', 'Cancelled'],
+    Confirmed: ['Processing', 'Cancelled'],
     Processing: ['Shipped', 'Cancelled'],
     Shipped: ['Delivered'],
     Delivered: [],
+    Completed: [],
     Cancelled: [],
 };
 

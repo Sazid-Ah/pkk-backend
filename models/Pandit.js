@@ -57,11 +57,23 @@ const panditSchema = new mongoose.Schema({
         trim: true,
         default: '',
     },
+    // Displayed aggregate = blend of the admin seed and real user reviews.
     rating: {
         type: Number,
         default: 0,
     },
     numReviews: {
+        type: Number,
+        default: 0,
+    },
+    // Admin-set initial rating (seed) that user reviews blend into.
+    seedRating: {
+        type: Number,
+        min: 0,
+        max: 5,
+        default: 0,
+    },
+    seedReviews: {
         type: Number,
         default: 0,
     },

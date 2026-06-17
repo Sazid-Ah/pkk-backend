@@ -1,5 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const Product = require('../models/Product');
+const { recomputeRating } = require('../utils/ratingUtils');
 
 // Keep `mrp` only when it's a genuine markdown above the charged price.
 // Returns null otherwise so the item simply shows a single clean price.
@@ -48,7 +49,7 @@ const getProductById = asyncHandler(async (req, res) => {
 // @route   POST /api/products
 // @access  Private/Admin
 const createProduct = asyncHandler(async (req, res) => {
-    const { name, category, price, image, description, weight, type, includedItems, gstPercentage, mrp } = req.body;
+    const { name, category, price, image, description, weight, type, includedItems, gstPercentage, mrp, seedRating, seedReviews } = req.body;
 
     if (!name || !String(name).trim()) {
         res.status(400);
@@ -73,6 +74,10 @@ const createProduct = asyncHandler(async (req, res) => {
         finalPrice = includedItems.reduce((acc, item) => acc + Number(item.price), 0);
     }
 
+    // Admin's initial rating (seed); no user reviews yet, so displayed = seed.
+    const sRating = Math.min(5, Math.max(0, Number(seedRating) || 0));
+    const sReviews = Math.max(0, Number(seedReviews) || 0);
+
     const product = await Product.create({
         name,
         category,
@@ -85,6 +90,10 @@ const createProduct = asyncHandler(async (req, res) => {
         includedItems: type === 'package' ? includedItems : [],
         occasions: req.body.occasions || [],
         gstPercentage: gstPercentage || 0,
+        seedRating: sRating,
+        seedReviews: sReviews,
+        rating: sRating,
+        numReviews: sReviews,
     });
 
     res.status(201).json(product);
@@ -132,7 +141,15 @@ const updateProduct = asyncHandler(async (req, res) => {
             product.mrp = null;
         }
 
-        const updatedProduct = await (await product.save()).populate('occasions');
+        // Update the admin seed, then recompute the displayed rating (seed + reviews).
+        if (req.body.seedRating !== undefined) product.seedRating = Math.min(5, Math.max(0, Number(req.body.seedRating) || 0));
+        if (req.body.seedReviews !== undefined) product.seedReviews = Math.max(0, Number(req.body.seedReviews) || 0);
+
+        await product.save();
+        if (req.body.seedRating !== undefined || req.body.seedReviews !== undefined) {
+            await recomputeRating(Product, product._id, 'Product');
+        }
+        const updatedProduct = await Product.findById(product._id).populate('occasions');
         res.json(updatedProduct);
     } else {
         res.status(404);

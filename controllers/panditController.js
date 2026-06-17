@@ -10,6 +10,7 @@ try {
 }
 
 const Booking = require('../models/Booking');
+const { recomputeRating } = require('../utils/ratingUtils');
 
 // Keep `mrp` only when it's a genuine markdown above the displayed (minimum) price.
 function normalizeMrp(mrp, basePrice) {
@@ -75,7 +76,7 @@ const getPandits = asyncHandler(async (req, res) => {
 // @route   POST /api/pandits
 // @access  Private/Admin
 const createPandit = asyncHandler(async (req, res) => {
-    const { name, username, password, specialty, languages, about, rating, price, image, occasions, address, latitude, longitude, experience, isVerified, mrp } = req.body;
+    const { name, username, password, specialty, languages, about, price, image, occasions, address, latitude, longitude, experience, isVerified, mrp, seedRating, seedReviews } = req.body;
 
     // Validate required fields
     if (!name || !name.toString().trim()) {
@@ -116,6 +117,9 @@ const createPandit = asyncHandler(async (req, res) => {
 
     const priceStr = String(price).trim();
     const priceRange = parsePriceRange(priceStr);
+    // Admin's initial rating (seed); no user reviews yet, so displayed = seed.
+    const sRating = Math.min(5, Math.max(0, Number(seedRating) || 0));
+    const sReviews = Math.max(0, Number(seedReviews) || 0);
     const panditData = {
         name: String(name).trim(),
         username: String(username).trim(),
@@ -123,7 +127,10 @@ const createPandit = asyncHandler(async (req, res) => {
         specialty: String(specialty).trim(),
         languages: Array.isArray(languages) ? languages : (languages ? String(languages).split(',').map(l => l.trim()).filter(l => l) : []),
         about: about ? String(about) : '',
-        rating: rating ? Number(rating) : 0,
+        seedRating: sRating,
+        seedReviews: sReviews,
+        rating: sRating,
+        numReviews: sReviews,
         price: priceStr,
         ...priceRange,
         mrp: normalizeMrp(mrp, priceRange.priceMin),
@@ -177,9 +184,9 @@ const updatePandit = asyncHandler(async (req, res) => {
             : String(req.body.languages).split(',').map(l => l.trim()).filter(l => l);
     }
     if (req.body.about !== undefined) pandit.about = req.body.about;
-    // Admin can manually set rating and numReviews
-    if (req.body.rating !== undefined) pandit.rating = Number(req.body.rating);
-    if (req.body.numReviews !== undefined) pandit.numReviews = Number(req.body.numReviews);
+    // Admin sets the initial rating (seed); displayed rating is recomputed below.
+    if (req.body.seedRating !== undefined) pandit.seedRating = Math.min(5, Math.max(0, Number(req.body.seedRating) || 0));
+    if (req.body.seedReviews !== undefined) pandit.seedReviews = Math.max(0, Number(req.body.seedReviews) || 0);
     if (req.body.price) {
         pandit.price = String(req.body.price).trim();
         Object.assign(pandit, parsePriceRange(pandit.price));
@@ -204,7 +211,11 @@ const updatePandit = asyncHandler(async (req, res) => {
         };
     }
 
-    const updatedPandit = await pandit.save();
+    await pandit.save();
+    if (req.body.seedRating !== undefined || req.body.seedReviews !== undefined) {
+        await recomputeRating(Pandit, pandit._id, 'Pandit');
+    }
+    const updatedPandit = await Pandit.findById(pandit._id);
     res.json(await updatedPandit.populate('occasions'));
 });
 
