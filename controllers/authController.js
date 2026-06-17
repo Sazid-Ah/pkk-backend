@@ -662,6 +662,45 @@ const updateProfile = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Change password for the logged-in user (verifies current password)
+// @route   PUT /api/auth/change-password
+// @access  Private
+const changePassword = asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        res.status(400);
+        throw new Error('Please provide your current and new password');
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+        res.status(404);
+        throw new Error('User not found');
+    }
+
+    const matches = await bcrypt.compare(currentPassword, user.password);
+    if (!matches) {
+        res.status(400);
+        throw new Error('Current password is incorrect');
+    }
+
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+        res.status(400);
+        throw new Error(passwordValidation.error);
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    sendPasswordResetConfirmation(user.email, user.username).catch((err) =>
+        console.error('Failed to send password change confirmation:', err)
+    );
+
+    res.json({ success: true, message: 'Password changed successfully' });
+});
+
 // @desc    Get user data
 // @route   GET /api/auth/me
 // @access  Private
@@ -1009,6 +1048,7 @@ module.exports = {
     logout,
     getMe,
     updateProfile,
+    changePassword,
     getUsers,
     getLoginLogs,
     requestRegisterOTP,

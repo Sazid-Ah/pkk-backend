@@ -12,6 +12,7 @@ const {
     logout,
     getMe,
     updateProfile,
+    changePassword,
     getUsers,
     getLoginLogs,
     requestRegisterOTP,
@@ -34,6 +35,7 @@ router.post('/refresh-token', refreshToken);
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
+router.put('/change-password', protect, changePassword);
 router.get('/users', protect, employee, getUsers);
 router.get('/login-logs', protect, admin, getLoginLogs);
 
