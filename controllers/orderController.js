@@ -71,24 +71,23 @@ const addOrderItems = asyncHandler(async (req, res) => {
     const discountPercentage = activePromos.reduce((max, p) => Math.max(max, p.discountPercentage || 0), 0);
 
     // 2. Calculate Totals Server-side
-    let subtotal = 0;
-    let productGst = 0;
-    let serviceGst = 0;
-    let productTotalForDiscount = 0;
+    let productSubtotal = 0;
+    let serviceSubtotal = 0;
 
     items.forEach(item => {
         const itemTotal = item.price * item.quantity;
-        subtotal += itemTotal;
-        
         if (item.type === 'product') {
-            productGst += itemTotal * 0.05; // 5% GST for products
-            productTotalForDiscount += itemTotal;
+            productSubtotal += itemTotal;
         } else {
-            serviceGst += itemTotal * 0.18; // 18% GST for services
+            serviceSubtotal += itemTotal;
         }
     });
 
-    const discountAmount = productTotalForDiscount * (discountPercentage / 100);
+    const subtotal = productSubtotal + serviceSubtotal;
+    // Discount applies to products only; GST is charged on the post-discount amount.
+    const discountAmount = productSubtotal * (discountPercentage / 100);
+    const productGst = (productSubtotal - discountAmount) * 0.05; // 5% GST on discounted products
+    const serviceGst = serviceSubtotal * 0.18;                    // 18% GST on services
     const gstTotal = productGst + serviceGst;
     const finalTotal = subtotal - discountAmount + gstTotal;
 
