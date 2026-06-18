@@ -162,6 +162,13 @@ connectDB()
 
 startCronJobs();
 
+// Log the email transport status at boot so misconfig is obvious in the logs.
+try {
+    require('./utils/emailService').verifyEmailTransport();
+} catch (e) {
+    console.error('Email transport check failed to run:', e.message);
+}
+
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
     console.log('⚠️  SIGTERM received, shutting down gracefully');

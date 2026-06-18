@@ -1,8 +1,44 @@
 const nodemailer = require('nodemailer');
 const { generateOrderInvoicePdf, generateBookingInvoicePdf } = require('./invoicePdf');
 
+// ── HTTP email transport (Resend) ─────────────────────────────────────────────
+// SMTP egress is unreliable/blocked on many cloud hosts (e.g. Render → CONN
+// timeouts). When RESEND_API_KEY is set we send over HTTPS instead, which is
+// never affected by SMTP port blocking. Exposes a nodemailer-compatible
+// `sendMail(mailOptions)` so the rest of this file is unchanged.
+const sendViaResend = async (opts) => {
+    const attachments = (opts.attachments || []).map((a) => ({
+        filename: a.filename,
+        content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
+    }));
+    const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            from: opts.from,
+            to: opts.to,
+            subject: opts.subject,
+            html: opts.html,
+            ...(attachments.length ? { attachments } : {}),
+        }),
+    });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Resend API ${res.status}: ${text}`);
+    }
+    const data = await res.json().catch(() => ({}));
+    return { messageId: data.id };
+};
+
 // Create reusable transporter
 const createTransporter = () => {
+    // Prefer the HTTP API when configured.
+    if (process.env.RESEND_API_KEY) {
+        return { sendMail: sendViaResend };
+    }
     const port = parseInt(process.env.SMTP_PORT, 10) || 587;
     // Derive `secure` from the port when not explicitly set:
     // 465 = implicit TLS (secure:true); 587/25 = STARTTLS (secure:false).
@@ -22,9 +58,28 @@ const createTransporter = () => {
         connectionTimeout: 10000,
         greetingTimeout: 10000,
         socketTimeout: 15000,
-        // Some cloud hosts (incl. Render) have flaky IPv6 egress to SMTP hosts — force IPv4.
-        family: 4,
+        // Some cloud hosts have flaky IPv6 egress to SMTP — opt in with SMTP_FORCE_IPV4=true.
+        ...(process.env.SMTP_FORCE_IPV4 === 'true' ? { family: 4 } : {}),
     });
+};
+
+// Boot-time check so logs show the exact email status with the deployed env.
+const verifyEmailTransport = async () => {
+    if (process.env.RESEND_API_KEY) {
+        console.log('📧 Email transport: Resend (HTTP API)');
+        return;
+    }
+    const where = `SMTP ${process.env.SMTP_HOST || 'smtp.gmail.com'}:${parseInt(process.env.SMTP_PORT, 10) || 587}`;
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+        console.error(`❌ Email transport: missing SMTP_USER/SMTP_PASSWORD (${where})`);
+        return;
+    }
+    try {
+        await createTransporter().verify();
+        console.log(`✅ Email transport ready (${where})`);
+    } catch (e) {
+        console.error(`❌ Email transport FAILED (${where}): ${e.code || ''} ${e.message}`);
+    }
 };
 
 // Send OTP email
@@ -391,4 +446,5 @@ module.exports = {
     sendOrderConfirmationEmail,
     sendBookingConfirmationEmail,
     sendInquiryEmail,
+    verifyEmailTransport,
 };
