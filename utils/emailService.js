@@ -42,20 +42,21 @@ const createTransporter = () => {
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = parseInt(process.env.SMTP_PORT, 10) || 587;
 
+    // Mirror the working jobs_backend transporter exactly (same Render region + Gmail).
     const options = {
         auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
         pool: true,
         maxConnections: 5,
         maxMessages: 100,
-        // Render's egress to SMTP is slow to connect (not blocked) — needs a generous
-        // timeout; a short one causes false ETIMEDOUT on connect.
+        rateDelta: 1000,
+        rateLimit: 5,
         connectionTimeout: 30000,
         greetingTimeout: 10000,
         socketTimeout: 30000,
     };
 
     if (host === 'smtp.gmail.com') {
-        // Use nodemailer's built-in Gmail preset (proven to work on Render).
+        // nodemailer's built-in Gmail preset; do NOT force IPv4 (matches working project).
         Object.assign(options, { service: 'gmail', secure: true });
     } else {
         Object.assign(options, {
@@ -66,9 +67,8 @@ const createTransporter = () => {
         });
     }
 
-    // Force IPv4 by DEFAULT — this Render service's IPv6 route to Gmail black-holes
-    // (ETIMEDOUT on connect). Proven required here. Set SMTP_FORCE_IPV4=false to disable.
-    if (process.env.SMTP_FORCE_IPV4 !== 'false') options.family = 4;
+    // Optional IPv4 override (off by default, like the working project).
+    if (process.env.SMTP_FORCE_IPV4 === 'true') options.family = 4;
 
     return nodemailer.createTransport(options);
 };

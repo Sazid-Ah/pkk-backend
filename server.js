@@ -10,11 +10,16 @@ const { startCronJobs } = require('./utils/cron');
 dotenv.config();
 
 // Validate required environment variables at startup
-const REQUIRED_ENV_VARS = ['MONGO_URI', 'JWT_SECRET', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'SMTP_USER', 'SMTP_PASSWORD'];
+const REQUIRED_ENV_VARS = ['MONGO_URI', 'JWT_SECRET', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'];
 const missingVars = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
     console.error(`❌ Missing required environment variables: ${missingVars.join(', ')}`);
     process.exit(1);
+}
+// Email transport: Resend (HTTP) OR SMTP creds. Not fatal — email is best-effort —
+// but warn loudly so a misconfig is obvious (esp. on Cloud Run where SMTP is blocked).
+if (!process.env.RESEND_API_KEY && !(process.env.SMTP_USER && process.env.SMTP_PASSWORD)) {
+    console.warn('⚠️  No email transport configured — set RESEND_API_KEY (recommended on Cloud Run) or SMTP_USER/SMTP_PASSWORD. Emails will fail until then.');
 }
 
 const port = process.env.PORT || 8080;

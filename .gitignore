@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 
+# SSH / private keys — never commit
+*.pem
+*.key
+
 # Node.js
 node_modules
 package-lock.json
