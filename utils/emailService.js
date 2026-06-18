@@ -39,28 +39,37 @@ const createTransporter = () => {
     if (process.env.RESEND_API_KEY) {
         return { sendMail: sendViaResend };
     }
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = parseInt(process.env.SMTP_PORT, 10) || 587;
-    // Derive `secure` from the port when not explicitly set:
-    // 465 = implicit TLS (secure:true); 587/25 = STARTTLS (secure:false).
-    // A port/secure mismatch is a common cause of CONN timeouts.
-    const secure = process.env.SMTP_SECURE !== undefined
-        ? process.env.SMTP_SECURE === 'true'
-        : port === 465;
-    return nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port,
-        secure,
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASSWORD,
-        },
-        // Fail fast instead of hanging ~2 min when SMTP egress is blocked/misrouted.
-        connectionTimeout: 10000,
+
+    const options = {
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
+        // Render's egress to SMTP is slow to connect (not blocked) — needs a generous
+        // timeout; a short one causes false ETIMEDOUT on connect.
+        connectionTimeout: 30000,
         greetingTimeout: 10000,
-        socketTimeout: 15000,
-        // Some cloud hosts have flaky IPv6 egress to SMTP — opt in with SMTP_FORCE_IPV4=true.
-        ...(process.env.SMTP_FORCE_IPV4 === 'true' ? { family: 4 } : {}),
-    });
+        socketTimeout: 30000,
+    };
+
+    if (host === 'smtp.gmail.com') {
+        // Use nodemailer's built-in Gmail preset (proven to work on Render).
+        Object.assign(options, { service: 'gmail', secure: true });
+    } else {
+        Object.assign(options, {
+            host,
+            port,
+            // 465 = implicit TLS; 587/25 = STARTTLS. Derived when SMTP_SECURE unset.
+            secure: process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === 'true' : port === 465,
+        });
+    }
+
+    // IPv4 is opt-in (the working reference project does NOT force it).
+    if (process.env.SMTP_FORCE_IPV4 === 'true') options.family = 4;
+
+    return nodemailer.createTransport(options);
 };
 
 // Boot-time check so logs show the exact email status with the deployed env.
