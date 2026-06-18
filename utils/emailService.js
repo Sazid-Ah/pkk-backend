@@ -66,8 +66,9 @@ const createTransporter = () => {
         });
     }
 
-    // IPv4 is opt-in (the working reference project does NOT force it).
-    if (process.env.SMTP_FORCE_IPV4 === 'true') options.family = 4;
+    // Force IPv4 by DEFAULT — this Render service's IPv6 route to Gmail black-holes
+    // (ETIMEDOUT on connect). Proven required here. Set SMTP_FORCE_IPV4=false to disable.
+    if (process.env.SMTP_FORCE_IPV4 !== 'false') options.family = 4;
 
     return nodemailer.createTransport(options);
 };
