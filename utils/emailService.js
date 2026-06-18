@@ -72,6 +72,14 @@ const createTransporter = () => {
     return nodemailer.createTransport(options);
 };
 
+// Single shared transporter (reused across all emails). With pool:true a new
+// transporter per-send would leak connections and get throttled by Gmail.
+let _transporter;
+const getTransporter = () => {
+    if (!_transporter) _transporter = createTransporter();
+    return _transporter;
+};
+
 // Boot-time check so logs show the exact email status with the deployed env.
 const verifyEmailTransport = async () => {
     if (process.env.RESEND_API_KEY) {
@@ -84,7 +92,7 @@ const verifyEmailTransport = async () => {
         return;
     }
     try {
-        await createTransporter().verify();
+        await getTransporter().verify();
         console.log(`✅ Email transport ready (${where})`);
     } catch (e) {
         console.error(`❌ Email transport FAILED (${where}): ${e.code || ''} ${e.message}`);
@@ -94,7 +102,7 @@ const verifyEmailTransport = async () => {
 // Send OTP email
 const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP - Pandit Katha Kalyan', title = 'Password Reset Request') => {
     try {
-        const transporter = createTransporter();
+        const transporter = getTransporter();
 
         const mailOptions = {
             from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
@@ -157,7 +165,7 @@ const sendOTPEmail = async (email, otp, username, subject = 'Password Reset OTP 
 // Send password reset confirmation email
 const sendPasswordResetConfirmation = async (email, username) => {
     try {
-        const transporter = createTransporter();
+        const transporter = getTransporter();
 
         const mailOptions = {
             from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
@@ -216,7 +224,7 @@ const sendPasswordResetConfirmation = async (email, username) => {
 
 const sendBookingCancellationEmail = async (email, username, bookingId, amount) => {
     try {
-        const transporter = createTransporter();
+        const transporter = getTransporter();
         const mailOptions = {
             from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
@@ -261,7 +269,7 @@ const sendBookingCancellationEmail = async (email, username, bookingId, amount) 
 
 const sendOrderCancellationEmail = async (email, username, orderId, amount) => {
     try {
-        const transporter = createTransporter();
+        const transporter = getTransporter();
         const mailOptions = {
             from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
             to: email,
@@ -306,7 +314,7 @@ const sendOrderCancellationEmail = async (email, username, orderId, amount) => {
 
 const sendInquiryEmail = async ({ name, email, phone, subject, message }) => {
     try {
-        const transporter = createTransporter();
+        const transporter = getTransporter();
         const to = process.env.CONTACT_NOTIFICATION_EMAILS || process.env.SMTP_USER;
         const mailOptions = {
             from: `"${process.env.SMTP_FROM_NAME || 'Pandit Katha Kalyan'}" <${process.env.SMTP_FROM_EMAIL}>`,
@@ -355,7 +363,7 @@ const sendInquiryEmail = async ({ name, email, phone, subject, message }) => {
 
 const sendOrderConfirmationEmail = async (email, username, order) => {
     try {
-        const transporter = createTransporter();
+        const transporter = getTransporter();
         const shortId = String(order._id).slice(-6).toUpperCase();
         const rows = (order.items || []).map(i =>
             `<tr><td style="padding:6px 0;color:#4b5563">${i.name} × ${i.quantity || 1}</td><td style="padding:6px 0;text-align:right;color:#111827">₹${((Number(i.price) || 0) * (Number(i.quantity) || 1)).toFixed(2)}</td></tr>`
@@ -402,7 +410,7 @@ const sendOrderConfirmationEmail = async (email, username, order) => {
 
 const sendBookingConfirmationEmail = async (email, username, booking) => {
     try {
-        const transporter = createTransporter();
+        const transporter = getTransporter();
         const shortId = String(booking._id).slice(-6).toUpperCase();
         const total = Number(booking.totalAmount) || Number(booking.price) || 0;
         const when = booking.bookingDate ? new Date(booking.bookingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
