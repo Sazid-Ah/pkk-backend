@@ -6,6 +6,7 @@ const Promotion = require('../models/Promotion');
 const RefundLog = require('../models/RefundLog');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const { notifyUser } = require('../utils/notify');
 const { sendOrderCancellationEmail, sendOrderConfirmationEmail } = require('../utils/emailService');
 
 // Best-effort alert to all admins when an automated refund fails.
@@ -105,6 +106,17 @@ const addOrderItems = asyncHandler(async (req, res) => {
     });
 
     const createdOrder = await order.save();
+
+    // Notify the customer their order was received (confirmed for COD).
+    const placedShortId = String(createdOrder._id).slice(-6).toUpperCase();
+    notifyUser(req.user._id, {
+        type: 'order',
+        title: createdOrder.status === 'Confirmed' ? 'Order confirmed' : 'Order placed',
+        message: createdOrder.status === 'Confirmed'
+            ? `Your order #${placedShortId} is confirmed and being prepared.`
+            : `We've received your order #${placedShortId}. Complete payment to confirm it.`,
+        link: '/orders',
+    }).catch(() => {});
 
     // COD orders are confirmed immediately — send a confirmation now.
     // (Online orders get their confirmation after payment is verified.)
@@ -237,12 +249,11 @@ const updateOrderToStatus = asyncHandler(async (req, res) => {
 
         const updatedOrder = await order.save();
 
-        const shortId = String(order._id).slice(-6).toUpperCase();
-        Notification.create({
-            user: order.user._id || order.user,
+        const updShortId = String(order._id).slice(-6).toUpperCase();
+        notifyUser(order.user._id || order.user, {
             type: 'order',
             title: 'Order update',
-            message: `Your order #${shortId} is now ${updatedStatus.toLowerCase()}.`,
+            message: `Your order #${updShortId} is now ${updatedStatus.toLowerCase()}.`,
             link: '/orders',
         }).catch(() => {});
 
@@ -336,6 +347,12 @@ const verifyPayment = asyncHandler(async (req, res) => {
         order.paymentStatus = 'Paid';
         order.status = 'Confirmed';
         const updatedOrder = await order.save();
+        notifyUser(order.user, {
+            type: 'order',
+            title: 'Order confirmed',
+            message: `Payment received — your order #${String(order._id).slice(-6).toUpperCase()} is confirmed.`,
+            link: '/orders',
+        }).catch(() => {});
         try {
             await order.populate('user', 'username fullName email');
             if (order.user?.email) {

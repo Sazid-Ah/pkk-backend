@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const { notifyUser } = require('../utils/notify');
 const { sendBookingCancellationEmail, sendBookingConfirmationEmail } = require('../utils/emailService');
 
 // Best-effort alert to all admins when an automated refund fails.
@@ -134,12 +135,21 @@ const createBooking = asyncHandler(async (req, res) => {
     }
 
     // Notify the assigned pandit (best-effort).
-    Notification.create({
-        user: pandit,
+    notifyUser(pandit, {
         type: 'booking',
         title: 'New booking',
         message: `You have a new booking for ${occasion}.`,
         link: '/pandit/bookings',
+    }).catch(() => {});
+
+    // Notify the customer that their booking was placed.
+    notifyUser(req.user._id, {
+        type: 'booking',
+        title: paymentMethod === 'PayAfterService' ? 'Booking confirmed' : 'Booking placed',
+        message: paymentMethod === 'PayAfterService'
+            ? `Your booking for ${occasion} is confirmed.`
+            : `Your booking for ${occasion} is placed. Complete payment to confirm it.`,
+        link: '/bookings',
     }).catch(() => {});
 
     // Pay-after-service is confirmed on creation → email now.
@@ -387,8 +397,7 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
 
         const updatedBooking = await booking.save();
 
-        Notification.create({
-            user: booking.user._id || booking.user,
+        notifyUser(booking.user._id || booking.user, {
             type: 'booking',
             title: 'Booking update',
             message: `Your booking is now ${updatedStatus.toLowerCase()}.`,
@@ -487,6 +496,12 @@ const verifyBookingPayment = asyncHandler(async (req, res) => {
         booking.paymentStatus = 'Paid';
         booking.paymentMethod = 'Online';
         await booking.save();
+        notifyUser(booking.user, {
+            type: 'booking',
+            title: 'Booking confirmed',
+            message: `Payment received — your booking for ${booking.occasion} is confirmed.`,
+            link: '/bookings',
+        }).catch(() => {});
         try {
             await booking.populate('user', 'username fullName email');
             if (booking.user?.email) {
