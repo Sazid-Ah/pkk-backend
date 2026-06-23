@@ -43,14 +43,15 @@ const getPandits = asyncHandler(async (req, res) => {
     let sortQuery = {};
 
     if (lat && lng && sort !== 'rating') {
-        // Default proximity sort (within 50km)
+        // Sort by proximity to the user's location — nearest first. No
+        // $maxDistance: we never exclude anyone, so far pandits still load
+        // (just lower down the list) instead of disappearing.
         query.location = {
             $nearSphere: {
                 $geometry: {
                     type: "Point",
                     coordinates: [parseFloat(lng), parseFloat(lat)]
-                },
-                $maxDistance: 50000 // 50km radius
+                }
             }
         };
     }
