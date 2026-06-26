@@ -103,6 +103,14 @@ const panditSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+    // Indian state the pandit serves in. Used to show a client only the pandits
+    // in their (selected/detected) state. Stored as the canonical state name.
+    state: {
+        type: String,
+        trim: true,
+        default: '',
+        index: true,
+    },
     location: {
         type: {
             type: String,
@@ -129,6 +137,29 @@ const panditSchema = new mongoose.Schema({
     occasions: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Occasion'
+    }],
+    // Per-occasion pricing. Source of truth for what a pandit charges: each
+    // occasion (service) carries its own price, and two pandits can price the
+    // same occasion differently. `occasions`, `price`, `priceMin`, `priceMax`
+    // are derived from this in the controller for backward-compatible display,
+    // sorting and `?occasionId` filtering.
+    services: [{
+        occasion: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Occasion',
+            required: true,
+        },
+        price: {
+            type: Number,
+            required: true,
+            min: [0, 'Service price cannot be negative'],
+        },
+        // Optional compare-at / original price for a per-service discount badge.
+        mrp: {
+            type: Number,
+            min: [0, 'MRP cannot be negative'],
+            default: null,
+        },
     }],
     translations: {
         type: Object,
