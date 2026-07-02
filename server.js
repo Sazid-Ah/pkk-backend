@@ -107,6 +107,7 @@ const routes = [
     { path: '/api/pandit-applications', file: './routes/panditApplicationRoutes' },
     { path: '/api/reviews', file: './routes/reviewRoutes' },
     { path: '/api/contact', file: './routes/contactRoutes' },
+    { path: '/api/deletion-requests', file: './routes/deletionRequestRoutes' },
     { path: '/api/notifications', file: './routes/notificationRoutes' },
     { path: '/api/setup', file: './routes/setupRoutes' },
 ];
