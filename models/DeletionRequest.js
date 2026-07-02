@@ -25,11 +25,6 @@ const deletionRequestSchema = new mongoose.Schema(
             type: String,
             default: '',
         },
-        status: {
-            type: String,
-            enum: ['pending', 'completed', 'cancelled'],
-            default: 'pending',
-        },
         handledBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
