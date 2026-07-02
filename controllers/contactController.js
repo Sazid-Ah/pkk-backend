@@ -57,12 +57,20 @@ const submitInquiry = asyncHandler(async (req, res) => {
 
 
 const getContacted = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, status, from, to } = req.query;
     const skip = (page - 1) * limit;
+    const query = {};
+
+    if (status) query.status = status;
+    if (from || to) {
+        query.createdAt = {};
+        if (from) query.createdAt.$gte = new Date(from);
+        if (to) query.createdAt.$lte = new Date(to);
+    }
 
     try {
-        const contacted = await Contact.find().skip(skip).limit(parseInt(limit));
-        const total = await Contact.countDocuments();
+        const contacted = await Contact.find(query).skip(skip).limit(parseInt(limit));
+        const total = await Contact.countDocuments(query);
 
         res.status(200).json({
             success: true,
@@ -77,7 +85,33 @@ const getContacted = asyncHandler(async (req, res) => {
     }
 });
 
+const updateContactStatus = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const allowedStatuses = ['new', 'read', 'replied', 'archived'];
+
+    if (!status || !allowedStatuses.includes(status)) {
+        res.status(400);
+        throw new Error(`Invalid status. Allowed values: ${allowedStatuses.join(', ')}`);
+    }
+
+    const contact = await Contact.findById(id);
+    if (!contact) {
+        res.status(404);
+        throw new Error('Contact inquiry not found');
+    }
+
+    contact.status = status;
+    await contact.save();
+
+    res.status(200).json({
+        success: true,
+        data: contact,
+    });
+});
+
 module.exports = {
     submitInquiry,
-    getContacted
+    getContacted,
+    updateContactStatus,
 };
