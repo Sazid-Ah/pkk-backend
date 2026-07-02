@@ -54,6 +54,30 @@ const submitInquiry = asyncHandler(async (req, res) => {
     }
 });
 
+
+
+const getContacted = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+
+    try {
+        const contacted = await Contact.find().skip(skip).limit(parseInt(limit));
+        const total = await Contact.countDocuments();
+
+        res.status(200).json({
+            success: true,
+            data: contacted,
+            total,
+            pages: Math.ceil(total / limit),
+            page: parseInt(page)
+        });
+    } catch (error) {
+        res.status(500);
+        throw new Error('Failed to fetch contacted. Please try again later.');
+    }
+});
+
 module.exports = {
-    submitInquiry
+    submitInquiry,
+    getContacted
 };
