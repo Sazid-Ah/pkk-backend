@@ -1040,70 +1040,80 @@ const verifyRegisterOTP = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/delete-account
 // @access  Public
 const deleteAccount = asyncHandler(async (req, res) => {
-    let { email, password, otp } = req.body;
+    try {
+        let { email, password, otp } = req.body;
 
-    if (!email || !password || !otp) {
-        res.status(400);
-        throw new Error('Please provide email, password and verification code');
+        if (!email || !password || !otp) {
+            res.status(400);
+            throw new Error('Please provide email, password and verification code');
+        }
+
+        email = email.trim().toLowerCase();
+
+        // Find user by email
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            res.status(404);
+            throw new Error('User not found');
+        }
+
+        // Verify password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            res.status(401);
+            throw new Error('Incorrect password');
+        }
+
+        // Verify OTP
+        if (user.otp !== otp || user.otpExpiry < Date.now()) {
+            res.status(400);
+            throw new Error('Invalid or expired verification code');
+        }
+
+        // Mark user as pending deletion
+        user.isDeletionPending = true;
+        user.deletionRequestedAt = new Date();
+        user.otp = undefined;
+        user.otpExpiry = undefined;
+        await user.save();
+
+        // Create a record in DeletionRequest collection
+        await DeletionRequest.create({
+            user: user._id,
+            email: user.email,
+            status: 'pending',
+            requestedAt: user.deletionRequestedAt
+        });
+
+        // Log the deletion request
+        await logActivity(
+            user._id,
+            'User',
+            user.username,
+            user.email || '',
+            user.role || 'user',
+            'account_deletion_requested',
+            req.ip || req.connection.remoteAddress,
+            req.get('user-agent'),
+            req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
+            null,
+            `User requested account deletion via website`
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Your account has been marked for deletion and will be permanently removed within 24 hours.',
+        });
+    } catch (error) {
+        console.error('[deleteAccount] failed:', {
+            message: error.message,
+            email: req.body?.email,
+            otp: req.body?.otp ? 'provided' : 'missing',
+            stack: error.stack,
+        });
+        throw error;
     }
-
-    email = email.trim().toLowerCase();
-
-    // Find user by email
-    const user = await User.findOne({ email });
-
-    if (!user) {
-        res.status(404);
-        throw new Error('User not found');
-    }
-
-    // Verify password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-        res.status(401);
-        throw new Error('Incorrect password');
-    }
-
-    // Verify OTP
-    if (user.otp !== otp || user.otpExpiry < Date.now()) {
-        res.status(400);
-        throw new Error('Invalid or expired verification code');
-    }
-
-    // Mark user as pending deletion
-    user.isDeletionPending = true;
-    user.deletionRequestedAt = new Date();
-    user.otp = undefined;
-    user.otpExpiry = undefined;
-    await user.save();
-
-    // Create a record in DeletionRequest collection
-    await DeletionRequest.create({
-        user: user._id,
-        email: user.email,
-        status: 'pending',
-        requestedAt: user.deletionRequestedAt
-    });
-
-    // Log the deletion request
-    await logActivity(
-        user._id,
-        'User',
-        user.username,
-        user.email || '',
-        user.role || 'user',
-        'account_deletion_requested',
-        req.ip || req.connection.remoteAddress,
-        req.get('user-agent'),
-        req.get('user-agent')?.includes('Mobile') ? 'Mobile' : 'Desktop',
-        null,
-        `User requested account deletion via website`
-    );
-
-    res.status(200).json({
-        success: true,
-        message: 'Your account has been marked for deletion and will be permanently removed within 24 hours.',
-    });
 });
 
 // @desc    Undo account deletion (Restore account)

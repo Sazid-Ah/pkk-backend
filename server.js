@@ -133,6 +133,14 @@ app.get('/', (req, res) => {
 
 app.use((err, req, res, next) => {
     const statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
+    console.error('[GlobalError]', {
+        statusCode,
+        message: err.message,
+        stack: err.stack,
+        path: req.originalUrl,
+        method: req.method,
+        body: req.body,
+    });
     res.status(statusCode).json({
         success: false,
         message: err.message,
