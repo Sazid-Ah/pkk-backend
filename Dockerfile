@@ -11,7 +11,7 @@ RUN npm ci --omit=dev
 COPY . .
 
 ENV NODE_ENV=production
-# Cloud Run injects PORT (default 8080); server.js already uses process.env.PORT.
+# Vercel injects PORT via environment variable; server.js defaults to 8080
 EXPOSE 8080
 
 CMD ["node", "server.js"]
