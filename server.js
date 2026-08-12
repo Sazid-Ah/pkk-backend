@@ -148,14 +148,8 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Start server immediately
-console.log(`📡 Attempting to listen on port ${port}...`);
-const server = app.listen(port, () => {
-    console.log(`✅ Server is listening on port ${port}`);
-});
-
-// Set server timeout to 2 minutes
-server.setTimeout(120000);
+// Export app for Vercel/serverless environments
+module.exports = app;
 
 // Connect to database asynchronously (non-blocking)
 console.log('🔄 Connecting to MongoDB...');
@@ -183,27 +177,38 @@ try {
     console.error('Email transport check failed to run:', e.message);
 }
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('⚠️  SIGTERM received, shutting down gracefully');
-    server.close(async () => {
-        console.log('🛑 Server closed');
-        try {
-            await require('mongoose').disconnect();
-            console.log('🛑 MongoDB disconnected');
-        } catch (e) {
-            console.error('Error disconnecting MongoDB:', e.message);
-        }
-        process.exit(0);
+// Only start listening if not in serverless environment (Vercel, etc.)
+if (require.main === module) {
+    console.log(`📡 Attempting to listen on port ${port}...`);
+    const server = app.listen(port, () => {
+        console.log(`✅ Server is listening on port ${port}`);
     });
-});
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-    console.error('💥 Uncaught Exception:', error);
-    process.exit(1);
-});
+    // Set server timeout to 2 minutes
+    server.setTimeout(120000);
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
-});
+    // Handle graceful shutdown
+    process.on('SIGTERM', () => {
+        console.log('⚠️  SIGTERM received, shutting down gracefully');
+        server.close(async () => {
+            console.log('🛑 Server closed');
+            try {
+                await require('mongoose').disconnect();
+                console.log('🛑 MongoDB disconnected');
+            } catch (e) {
+                console.error('Error disconnecting MongoDB:', e.message);
+            }
+            process.exit(0);
+        });
+    });
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+        console.error('💥 Uncaught Exception:', error);
+        process.exit(1);
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    });
+}
