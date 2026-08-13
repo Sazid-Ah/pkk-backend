@@ -211,8 +211,10 @@ async function initializeServices() {
         // Don't exit - allow requests to proceed without DB
     }
 
-    // Start cron jobs only if DB is connected
-    if (dbInitialized) {
+    // Start cron jobs only if DB is connected, and never on serverless: a lambda is
+    // frozen between requests and discarded, so timers either never fire or fire
+    // redundantly once per instance. Schedule these via Vercel Cron instead.
+    if (dbInitialized && !process.env.VERCEL) {
         try {
             startCronJobs();
             console.log('✅ Cron jobs started');

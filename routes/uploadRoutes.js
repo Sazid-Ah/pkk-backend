@@ -4,32 +4,60 @@ const mongoose = require('mongoose');
 const { GridFSBucket, ObjectId } = require('mongodb');
 const path = require('path');
 const upload = require('../middleware/uploadMiddleware');
+const connectDB = require('../config/db');
 const { protect } = require('../middleware/authMiddleware');
 const { uploadLimiter } = require('../middleware/rateLimiter');
 
-// Get GridFS bucket instance
-let gfsBucket;
-mongoose.connection.once('open', () => {
+// Resolve the bucket per request rather than latching it on the one-shot 'open'
+// event. On serverless every cold instance starts disconnected, so a listener-based
+// bucket is still undefined for the first requests that instance handles — which
+// made images 500 at random whenever a page fanned out across fresh lambdas.
+let gfsBucket = null;
+
+const getBucket = async () => {
+    if (gfsBucket) return gfsBucket;
+
+    if (mongoose.connection.readyState === 2) {
+        await mongoose.connection.asPromise();
+    } else if (mongoose.connection.readyState !== 1) {
+        await connectDB();
+    }
+
     gfsBucket = new GridFSBucket(mongoose.connection.db, {
         bucketName: 'uploads',
     });
+    return gfsBucket;
+};
+
+// A dropped connection invalidates the cached bucket's db handle.
+mongoose.connection.on('disconnected', () => {
+    gfsBucket = null;
 });
+
+// GridFS ids are immutable, so a stored image never changes under its URL.
+// Without this every <img> on every page view re-invokes the function and
+// re-streams from Atlas, because Vercel's CDN won't cache an uncacheable response.
+const IMAGE_CACHE_CONTROL = 'public, max-age=31536000, s-maxage=31536000, immutable';
 
 // @desc    Upload an image to MongoDB GridFS
 // @route   POST /api/upload
 // @access  Private
-router.post('/', protect, uploadLimiter, upload.single('image'), (req, res) => {
+router.post('/', protect, uploadLimiter, upload.single('image'), async (req, res) => {
     if (!req.file) {
         return res.status(400).send({ message: 'No image uploaded' });
     }
 
-    if (!gfsBucket) {
-        return res.status(500).send({ message: 'Database connection not ready for upload' });
+    let bucket;
+    try {
+        bucket = await getBucket();
+    } catch (err) {
+        console.error('GridFS connection error on upload:', err.message);
+        return res.status(503).send({ message: 'Database connection not ready for upload' });
     }
 
     // Create an upload stream to GridFS and store original filename + content type in metadata
     const filename = `${req.file.fieldname}-${Date.now()}-${req.file.originalname}`;
-    const uploadStream = gfsBucket.openUploadStream(filename, {
+    const uploadStream = bucket.openUploadStream(filename, {
         metadata: {
             originalName: req.file.originalname,
             contentType: req.file.mimetype,
@@ -61,12 +89,10 @@ router.post('/', protect, uploadLimiter, upload.single('image'), (req, res) => {
 // because Express would otherwise capture the dot+extension as part of the :id param.
 router.get('/image/:id.:ext', async (req, res) => {
     try {
-        if (!gfsBucket) {
-            return res.status(500).send('Database connection not ready for retrieval');
-        }
+        const bucket = await getBucket();
 
         const fileId = new ObjectId(req.params.id);
-        const files = await gfsBucket.find({ _id: fileId }).toArray();
+        const files = await bucket.find({ _id: fileId }).toArray();
         if (!files || files.length === 0) {
             return res.status(404).json({ message: 'Image not found in database' });
         }
@@ -84,10 +110,12 @@ router.get('/image/:id.:ext', async (req, res) => {
         const contentType = fileDoc.contentType || fileDoc.metadata?.contentType || extToMime[ext] || 'application/octet-stream';
 
         res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', IMAGE_CACHE_CONTROL);
+        if (fileDoc.length) res.setHeader('Content-Length', fileDoc.length);
         const filenameForHeader = fileDoc.metadata?.originalName || fileDoc.filename || `${fileId}${ext}`;
         res.setHeader('Content-Disposition', `inline; filename="${filenameForHeader}"`);
 
-        const downloadStream = gfsBucket.openDownloadStream(fileId);
+        const downloadStream = bucket.openDownloadStream(fileId);
         downloadStream.pipe(res);
 
         downloadStream.on('error', (err) => {
@@ -99,6 +127,12 @@ router.get('/image/:id.:ext', async (req, res) => {
             }
         });
     } catch (error) {
+        // A connection failure is not the caller's fault — don't report it as a bad id,
+        // or the client caches a permanent 400 for an image that actually exists.
+        if (error instanceof mongoose.Error || mongoose.connection.readyState !== 1) {
+            console.error('GridFS connection error (dot-ext):', error.message);
+            return res.status(503).json({ message: 'Database connection not ready for retrieval' });
+        }
         console.error('GridFS ID parsing Error (dot-ext):', error);
         res.status(400).json({ message: 'Invalid image ID format' });
     }
@@ -109,12 +143,10 @@ router.get('/image/:id.:ext', async (req, res) => {
 // @access  Public
 router.get('/image/:id', async (req, res) => {
     try {
-        if (!gfsBucket) {
-            return res.status(500).send('Database connection not ready for retrieval');
-        }
+        const bucket = await getBucket();
         const fileId = new ObjectId(req.params.id);
 
-        const files = await gfsBucket.find({ _id: fileId }).toArray();
+        const files = await bucket.find({ _id: fileId }).toArray();
         if (!files || files.length === 0) {
             return res.status(404).json({ message: 'Image not found in database' });
         }
@@ -132,10 +164,12 @@ router.get('/image/:id', async (req, res) => {
         const contentType = fileDoc.contentType || fileDoc.metadata?.contentType || extToMime[ext] || 'application/octet-stream';
 
         res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', IMAGE_CACHE_CONTROL);
+        if (fileDoc.length) res.setHeader('Content-Length', fileDoc.length);
         const filenameForHeader = fileDoc.metadata?.originalName || fileDoc.filename || `${fileId}${ext}`;
         res.setHeader('Content-Disposition', `inline; filename="${filenameForHeader}"`);
 
-        const downloadStream = gfsBucket.openDownloadStream(fileId);
+        const downloadStream = bucket.openDownloadStream(fileId);
         downloadStream.pipe(res);
 
         downloadStream.on('error', (err) => {
@@ -148,6 +182,10 @@ router.get('/image/:id', async (req, res) => {
         });
 
     } catch (error) {
+        if (error instanceof mongoose.Error || mongoose.connection.readyState !== 1) {
+            console.error('GridFS connection error:', error.message);
+            return res.status(503).json({ message: 'Database connection not ready for retrieval' });
+        }
         console.error('GridFS ID parsing Error:', error);
         res.status(400).json({ message: 'Invalid image ID format' });
     }
