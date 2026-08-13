@@ -48,7 +48,6 @@ let globalLimiter;
 try {
     const { globalLimiter: limiter } = require('./middleware/rateLimiter');
     globalLimiter = limiter;
-    app.use(globalLimiter);
     console.log('✓ Rate limiter loaded');
 } catch (error) {
     console.error('❌ Failed to load rate limiter:', error.message);
@@ -78,6 +77,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 // Note: app.use(cors()) already handles preflight OPTIONS requests globally
+if (globalLimiter) {
+    app.use(globalLimiter);
+}
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
