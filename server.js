@@ -100,6 +100,31 @@ try {
 
 app.use(requestLogger);
 
+// Static route loaders let Vercel trace and bundle every route module.
+const routeLoaders = {
+    './routes/authRoutes': () => require('./routes/authRoutes'),
+    './routes/activityRoutes': () => require('./routes/activityRoutes'),
+    './routes/panditRoutes': () => require('./routes/panditRoutes'),
+    './routes/productRoutes': () => require('./routes/productRoutes'),
+    './routes/categoryRoutes': () => require('./routes/categoryRoutes'),
+    './routes/orderRoutes': () => require('./routes/orderRoutes'),
+    './routes/employeeRoutes': () => require('./routes/employeeRoutes'),
+    './routes/occasionRoutes': () => require('./routes/occasionRoutes'),
+    './routes/bookingRoutes': () => require('./routes/bookingRoutes'),
+    './routes/uploadRoutes': () => require('./routes/uploadRoutes'),
+    './routes/analyticsRoutes': () => require('./routes/analyticsRoutes'),
+    './routes/settingsRoutes': () => require('./routes/settingsRoutes'),
+    './routes/globalSettingsRoutes': () => require('./routes/globalSettingsRoutes'),
+    './routes/promotionRoutes': () => require('./routes/promotionRoutes'),
+    './routes/wishlistRoutes': () => require('./routes/wishlistRoutes'),
+    './routes/panditApplicationRoutes': () => require('./routes/panditApplicationRoutes'),
+    './routes/reviewRoutes': () => require('./routes/reviewRoutes'),
+    './routes/contactRoutes': () => require('./routes/contactRoutes'),
+    './routes/deletionRequestRoutes': () => require('./routes/deletionRequestRoutes'),
+    './routes/notificationRoutes': () => require('./routes/notificationRoutes'),
+    './routes/setupRoutes': () => require('./routes/setupRoutes'),
+};
+
 // Load routes with error handling
 const routes = [
     { path: '/api/auth', file: './routes/authRoutes' },
@@ -128,7 +153,7 @@ const routes = [
 for (const route of routes) {
     try {
         console.log(`Loading route: ${route.path} from ${route.file}...`);
-        const routeModule = require(route.file);
+        const routeModule = routeLoaders[route.file]();
         app.use(route.path, routeModule);
         console.log(`✓ Route loaded: ${route.path}`);
     } catch (error) {
