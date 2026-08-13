@@ -61,25 +61,23 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 const corsOrigin = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
     : (process.env.NODE_ENV === 'production' ? false : true);
 if (!process.env.ALLOWED_ORIGINS) {
     console.warn('⚠️  CORS wildcard active — set ALLOWED_ORIGINS in production');
 }
-app.use(cors({ 
-    origin: corsOrigin, 
+
+// CORS configuration
+const corsOptions = {
+    origin: corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     optionsSuccessStatus: 200
-}));
-app.options('*', cors({ 
-    origin: corsOrigin, 
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 200
-}));
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
@@ -164,31 +162,50 @@ app.use((err, req, res, next) => {
 // Export app for Vercel/serverless environments
 module.exports = app;
 
-// Connect to database asynchronously (non-blocking)
-console.log('🔄 Connecting to MongoDB...');
-connectDB()
-    .then(() => {
+// Initialize database and services asynchronously (non-blocking)
+// This allows Vercel serverless to respond to requests immediately
+let dbInitialized = false;
+
+async function initializeServices() {
+    try {
+        console.log('🔄 Connecting to MongoDB...');
+        await connectDB();
+        dbInitialized = true;
         console.log('✅ Database connection established');
+        
         try {
             const { ensureAdminExists } = require('./config/adminSeed');
-            ensureAdminExists();
+            await ensureAdminExists();
         } catch (adminErr) {
             console.error('❌ Failed to run ensureAdminExists:', adminErr.message);
         }
-    })
-    .catch(error => {
+    } catch (error) {
         console.error('⚠️  Database connection failed:', error.message);
-        console.error('Server will continue running without database');
-    });
+        // Don't exit - allow requests to proceed without DB
+    }
 
-startCronJobs();
+    // Start cron jobs only if DB is connected
+    if (dbInitialized) {
+        try {
+            startCronJobs();
+            console.log('✅ Cron jobs started');
+        } catch (cronErr) {
+            console.error('⚠️  Failed to start cron jobs:', cronErr.message);
+        }
+    }
 
-// Log the email transport status at boot so misconfig is obvious in the logs.
-try {
-    require('./utils/emailService').verifyEmailTransport();
-} catch (e) {
-    console.error('Email transport check failed to run:', e.message);
+    // Email transport verification
+    try {
+        require('./utils/emailService').verifyEmailTransport();
+    } catch (e) {
+        console.error('Email transport check failed:', e.message);
+    }
 }
+
+// Start initialization in background - don't wait
+initializeServices().catch(err => {
+    console.error('❌ Service initialization error:', err);
+});
 
 // Only start listening if not in serverless environment (Vercel, etc.)
 if (require.main === module) {
