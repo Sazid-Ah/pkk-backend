@@ -8,6 +8,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { notifyUser } = require('../utils/notify');
 const { sendOrderCancellationEmail, sendOrderConfirmationEmail } = require('../utils/emailService');
+const { runInBackground } = require('../utils/background');
 
 // Best-effort alert to all admins when an automated refund fails.
 const notifyAdminsRefundFailure = async ({ kind, id, amount, reason }) => {
@@ -109,19 +110,19 @@ const addOrderItems = asyncHandler(async (req, res) => {
 
     // Notify the customer their order was received (confirmed for COD).
     const placedShortId = String(createdOrder._id).slice(-6).toUpperCase();
-    notifyUser(req.user._id, {
-        type: 'order',
-        title: createdOrder.status === 'Confirmed' ? 'Order confirmed' : 'Order placed',
-        message: createdOrder.status === 'Confirmed'
-            ? `Your order #${placedShortId} is confirmed and being prepared.`
-            : `We've received your order #${placedShortId}. Complete payment to confirm it.`,
-        link: '/orders',
-    }).catch(() => {});
+    runInBackground(() => notifyUser(req.user._id, {
+            type: 'order',
+            title: createdOrder.status === 'Confirmed' ? 'Order confirmed' : 'Order placed',
+            message: createdOrder.status === 'Confirmed'
+                ? `Your order #${placedShortId} is confirmed and being prepared.`
+                : `We've received your order #${placedShortId}. Complete payment to confirm it.`,
+            link: '/orders',
+        }), 'in-app notification');
 
     // COD orders are confirmed immediately — send a confirmation now.
     // (Online orders get their confirmation after payment is verified.)
     if ((paymentMethod || 'Razorpay') === 'CashOnDelivery' && req.user?.email) {
-        sendOrderConfirmationEmail(req.user.email, req.user.fullName || req.user.username || req.user.email, createdOrder).catch(() => {});
+        runInBackground(() => sendOrderConfirmationEmail(req.user.email, req.user.fullName || req.user.username || req.user.email, createdOrder), 'order confirmation email');
     }
 
     res.status(201).json(createdOrder);
@@ -210,7 +211,7 @@ const processOrderRefund = async (order) => {
             status: 'failed',
             failureReason: error.message || 'Razorpay refund failed',
         });
-        notifyAdminsRefundFailure({ kind: 'order', id: order._id, amount: order.totalAmount, reason: error.message }).catch(() => {});
+        runInBackground(() => notifyAdminsRefundFailure({ kind: 'order', id: order._id, amount: order.totalAmount, reason: error.message }), 'refund-failure admin alert');
         return order;
     }
 };
@@ -250,12 +251,12 @@ const updateOrderToStatus = asyncHandler(async (req, res) => {
         const updatedOrder = await order.save();
 
         const updShortId = String(order._id).slice(-6).toUpperCase();
-        notifyUser(order.user._id || order.user, {
-            type: 'order',
-            title: 'Order update',
-            message: `Your order #${updShortId} is now ${updatedStatus.toLowerCase()}.`,
-            link: '/orders',
-        }).catch(() => {});
+        runInBackground(() => notifyUser(order.user._id || order.user, {
+                type: 'order',
+                title: 'Order update',
+                message: `Your order #${updShortId} is now ${updatedStatus.toLowerCase()}.`,
+                link: '/orders',
+            }), 'in-app notification');
 
         res.json(updatedOrder);
     } else {
@@ -347,16 +348,16 @@ const verifyPayment = asyncHandler(async (req, res) => {
         order.paymentStatus = 'Paid';
         order.status = 'Confirmed';
         const updatedOrder = await order.save();
-        notifyUser(order.user, {
-            type: 'order',
-            title: 'Order confirmed',
-            message: `Payment received — your order #${String(order._id).slice(-6).toUpperCase()} is confirmed.`,
-            link: '/orders',
-        }).catch(() => {});
+        runInBackground(() => notifyUser(order.user, {
+                type: 'order',
+                title: 'Order confirmed',
+                message: `Payment received — your order #${String(order._id).slice(-6).toUpperCase()} is confirmed.`,
+                link: '/orders',
+            }), 'in-app notification');
         try {
             await order.populate('user', 'username fullName email');
             if (order.user?.email) {
-                sendOrderConfirmationEmail(order.user.email, order.user.fullName || order.user.username, updatedOrder).catch(() => {});
+                runInBackground(() => sendOrderConfirmationEmail(order.user.email, order.user.fullName || order.user.username, updatedOrder), 'order confirmation email');
             }
         } catch { /* email is best-effort */ }
         return res.json({ message: 'Payment verified successfully', order: updatedOrder });

@@ -2,7 +2,6 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const helmet = require('helmet');
-const path = require('path');
 const connectDB = require('./config/db');
 const requestLogger = require('./middleware/requestLogger');
 const { startCronJobs } = require('./utils/cron');
@@ -14,7 +13,14 @@ const REQUIRED_ENV_VARS = ['MONGO_URI', 'JWT_SECRET', 'RAZORPAY_KEY_ID', 'RAZORP
 const missingVars = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
     console.error(`❌ Missing required environment variables: ${missingVars.join(', ')}`);
-    process.exit(1);
+    // Exiting here is right for a container that a supervisor will restart and
+    // whose logs you read directly. On serverless it's the worst outcome: the
+    // process dies mid-init and every request returns an opaque
+    // FUNCTION_INVOCATION_FAILED with no hint of which variable is missing.
+    // Boot instead, and answer every request with the actual reason.
+    if (!process.env.VERCEL) {
+        process.exit(1);
+    }
 }
 // Email transport: Resend (HTTP) OR SMTP creds. Not fatal — email is best-effort —
 // but warn loudly so a misconfig is obvious (esp. on Cloud Run where SMTP is blocked).
@@ -43,6 +49,17 @@ app.get('/ready', (req, res) => {
     }
 });
 
+// Serverless counterpart to the process.exit above: say plainly what's missing
+// rather than failing the invocation with an unattributable platform error.
+if (missingVars.length > 0) {
+    app.use((req, res) => {
+        res.status(503).json({
+            success: false,
+            message: `Server misconfigured — missing environment variables: ${missingVars.join(', ')}. Set them in the Vercel project settings and redeploy.`,
+        });
+    });
+}
+
 // Load middlewares
 let globalLimiter;
 try {
@@ -59,21 +76,7 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
-const corsOrigin = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-    : (process.env.NODE_ENV === 'production' ? false : true);
-if (!process.env.ALLOWED_ORIGINS) {
-    console.warn('⚠️  CORS wildcard active — set ALLOWED_ORIGINS in production');
-}
-
-// CORS configuration
-const corsOptions = {
-    origin: corsOrigin,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 200
-};
+const { corsOptions } = require('./config/cors');
 
 app.use(cors(corsOptions));
 // Note: app.use(cors()) already handles preflight OPTIONS requests globally
@@ -163,13 +166,29 @@ for (const route of routes) {
     }
 }
 
-app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
+// NOTE: the old `app.use('/uploads', express.static(...))` line lived here. It was a
+// Cloud Run leftover — that directory is gitignored, so it isn't in the Vercel bundle,
+// and a serverless filesystem couldn't persist uploads anyway. Everything is served
+// from GridFS via /api/upload/image/:id.
 
 app.get('/', (req, res) => {
     res.json({ message: 'Pandit Katha Kalyan Backend is running' });
 });
 
 app.use((err, req, res, next) => {
+    // Multer surfaces size/field violations with statusCode unset, which the line
+    // below would report as a 500 — a client error dressed up as a server fault.
+    if (err && err.name === 'MulterError') {
+        const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+        console.warn(`[Upload] ${err.code}: ${err.message}`);
+        return res.status(status).json({
+            success: false,
+            message: err.code === 'LIMIT_FILE_SIZE'
+                ? 'Image is too large — maximum size is 4 MB.'
+                : err.message,
+        });
+    }
+
     const statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
     console.error('[GlobalError]', {
         statusCode,
@@ -223,11 +242,15 @@ async function initializeServices() {
         }
     }
 
-    // Email transport verification
-    try {
-        require('./utils/emailService').verifyEmailTransport();
-    } catch (e) {
-        console.error('Email transport check failed:', e.message);
+    // Email transport verification. Skipped on serverless: it's an SMTP handshake
+    // on the critical path of every cold start, to check a config that can't change
+    // between invocations. The transporter is created lazily on first send anyway.
+    if (!process.env.VERCEL) {
+        try {
+            require('./utils/emailService').verifyEmailTransport();
+        } catch (e) {
+            console.error('Email transport check failed:', e.message);
+        }
     }
 }
 

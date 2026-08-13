@@ -7,6 +7,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { notifyUser } = require('../utils/notify');
 const { sendBookingCancellationEmail, sendBookingConfirmationEmail } = require('../utils/emailService');
+const { runInBackground } = require('../utils/background');
 
 // Best-effort alert to all admins when an automated refund fails.
 const notifyAdminsRefundFailure = async ({ id, amount, reason }) => {
@@ -135,27 +136,27 @@ const createBooking = asyncHandler(async (req, res) => {
     }
 
     // Notify the assigned pandit (best-effort).
-    notifyUser(pandit, {
-        type: 'booking',
-        title: 'New booking',
-        message: `You have a new booking for ${occasion}.`,
-        link: '/pandit/bookings',
-    }).catch(() => {});
+    runInBackground(() => notifyUser(pandit, {
+            type: 'booking',
+            title: 'New booking',
+            message: `You have a new booking for ${occasion}.`,
+            link: '/pandit/bookings',
+        }), 'in-app notification');
 
     // Notify the customer that their booking was placed.
-    notifyUser(req.user._id, {
-        type: 'booking',
-        title: paymentMethod === 'PayAfterService' ? 'Booking confirmed' : 'Booking placed',
-        message: paymentMethod === 'PayAfterService'
-            ? `Your booking for ${occasion} is confirmed.`
-            : `Your booking for ${occasion} is placed. Complete payment to confirm it.`,
-        link: '/bookings',
-    }).catch(() => {});
+    runInBackground(() => notifyUser(req.user._id, {
+            type: 'booking',
+            title: paymentMethod === 'PayAfterService' ? 'Booking confirmed' : 'Booking placed',
+            message: paymentMethod === 'PayAfterService'
+                ? `Your booking for ${occasion} is confirmed.`
+                : `Your booking for ${occasion} is placed. Complete payment to confirm it.`,
+            link: '/bookings',
+        }), 'in-app notification');
 
     // Pay-after-service is confirmed on creation → email now.
     // Online bookings get their confirmation after payment is verified.
     if (paymentMethod === 'PayAfterService' && req.user?.email) {
-        sendBookingConfirmationEmail(req.user.email, req.user.fullName || req.user.username || req.user.email, booking).catch(() => {});
+        runInBackground(() => sendBookingConfirmationEmail(req.user.email, req.user.fullName || req.user.username || req.user.email, booking), 'booking confirmation email');
     }
 
     res.status(201).json(booking);
@@ -379,7 +380,7 @@ const processBookingRefund = async (booking) => {
             status: 'failed',
             failureReason: error.message || 'Razorpay refund failed',
         });
-        notifyAdminsRefundFailure({ id: booking._id, amount: refundAmount, reason: error.message }).catch(() => {});
+        runInBackground(() => notifyAdminsRefundFailure({ id: booking._id, amount: refundAmount, reason: error.message }), 'refund-failure admin alert');
         return booking;
     }
 };
@@ -397,12 +398,12 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
 
         const updatedBooking = await booking.save();
 
-        notifyUser(booking.user._id || booking.user, {
-            type: 'booking',
-            title: 'Booking update',
-            message: `Your booking is now ${updatedStatus.toLowerCase()}.`,
-            link: '/bookings',
-        }).catch(() => {});
+        runInBackground(() => notifyUser(booking.user._id || booking.user, {
+                type: 'booking',
+                title: 'Booking update',
+                message: `Your booking is now ${updatedStatus.toLowerCase()}.`,
+                link: '/bookings',
+            }), 'in-app notification');
 
         res.json(updatedBooking);
     } else {
@@ -496,16 +497,16 @@ const verifyBookingPayment = asyncHandler(async (req, res) => {
         booking.paymentStatus = 'Paid';
         booking.paymentMethod = 'Online';
         await booking.save();
-        notifyUser(booking.user, {
-            type: 'booking',
-            title: 'Booking confirmed',
-            message: `Payment received — your booking for ${booking.occasion} is confirmed.`,
-            link: '/bookings',
-        }).catch(() => {});
+        runInBackground(() => notifyUser(booking.user, {
+                type: 'booking',
+                title: 'Booking confirmed',
+                message: `Payment received — your booking for ${booking.occasion} is confirmed.`,
+                link: '/bookings',
+            }), 'in-app notification');
         try {
             await booking.populate('user', 'username fullName email');
             if (booking.user?.email) {
-                sendBookingConfirmationEmail(booking.user.email, booking.user.fullName || booking.user.username, booking).catch(() => {});
+                runInBackground(() => sendBookingConfirmationEmail(booking.user.email, booking.user.fullName || booking.user.username, booking), 'booking confirmation email');
             }
         } catch { /* email is best-effort */ }
         return res.json({ success: true, message: 'Payment verified successfully', booking });

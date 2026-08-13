@@ -9,7 +9,11 @@
 
 # Node.js
 node_modules
-package-lock.json
+# package-lock.json is intentionally NOT ignored — Vercel needs it to install the
+# exact tree that was tested, and without it every deploy resolves versions afresh.
+
+# Vercel
+.vercel
 
 # Build files
 build

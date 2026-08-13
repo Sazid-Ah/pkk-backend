@@ -21,7 +21,11 @@ const requestLogger = (req, res, next) => {
 
         const logLine = JSON.stringify(logRecord);
 
-        if (process.env.REQUEST_LOG_TO_FILE === 'true') {
+        // File logging is a Cloud Run–era option. A serverless filesystem is
+        // read-only outside /tmp, and /tmp is discarded with the instance, so
+        // honouring the flag there would throw EROFS on literally every request
+        // for logs nobody could ever read. stdout is the collected stream anyway.
+        if (process.env.REQUEST_LOG_TO_FILE === 'true' && !process.env.VERCEL) {
             const logDir = path.resolve(__dirname, '../logs');
             if (!fs.existsSync(logDir)) {
                 fs.mkdirSync(logDir, { recursive: true });

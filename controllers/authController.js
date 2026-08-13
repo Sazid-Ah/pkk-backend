@@ -9,6 +9,7 @@ const RegistrationOTP = require('../models/RegistrationOTP');
 const { sendOTPEmail, sendPasswordResetConfirmation } = require('../utils/emailService');
 const { validateEmail, validatePassword, validateOTP } = require('../utils/validation');
 const { logActivity } = require('./activityLogController');
+const { runInBackground } = require('../utils/background');
 
 // @desc    Register new user
 // @route   POST /api/auth/register
@@ -503,9 +504,7 @@ const resetPassword = asyncHandler(async (req, res) => {
     await user.save();
 
     // Send confirmation email (don't wait for it)
-    sendPasswordResetConfirmation(user.email, user.username).catch(err =>
-        console.error('Failed to send confirmation email:', err)
-    );
+    runInBackground(() => sendPasswordResetConfirmation(user.email, user.username), 'password reset confirmation email');
 
     res.status(200).json({
         success: true,
@@ -694,9 +693,7 @@ const changePassword = asyncHandler(async (req, res) => {
     user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
 
-    sendPasswordResetConfirmation(user.email, user.username).catch((err) =>
-        console.error('Failed to send password change confirmation:', err)
-    );
+    runInBackground(() => sendPasswordResetConfirmation(user.email, user.username), 'password reset confirmation email');
 
     res.json({ success: true, message: 'Password changed successfully' });
 });

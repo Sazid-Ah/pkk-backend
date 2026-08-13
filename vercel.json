@@ -6,18 +6,14 @@
   },
   "rewrites": [
     {
-      "source": "/api/:path*",
+      "source": "/(.*)",
       "destination": "/api"
     }
   ],
   "functions": {
     "api/index.js": {
       "memory": 1024,
-      "maxDuration": 300
-    },
-    "api/[...path].js": {
-      "memory": 1024,
-      "maxDuration": 300
+      "maxDuration": 60
     }
   }
 }
